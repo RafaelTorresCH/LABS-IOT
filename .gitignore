@@ -1,0 +1,13 @@
+# Artefactos y carpetas de compilación
+**/build/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/install_manifest.txt
+**/compile_commands.json
+**/*.bin
+**/*.elf
+**/*.map
+**/*.o
+**/*.a
+**/*.out

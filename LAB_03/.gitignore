@@ -1,0 +1,75 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# ESP-IDF generated files
+sdkconfig
+sdkconfig.old
+sdkconfig.ci.*
+sdkconfig.defaults.esp32c6
+
+# Compiled firmware
+*.bin
+*.elf
+*.map
+*.hex
+
+# Build cache and intermediate files
+*.d
+*.su
+*.o.d
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Managed components (downloaded dependencies)
+managed_components/
+dependencies.lock
+
+# IDE and editor files
+.vscode/
+.clangd
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Serial monitor outputs (optional - uncomment if needed)
+# *.serial.log
+
+# Partition table output
+*.csv.old
+
+# Environment-specific
+.env
+.env.local
+
+# VS Code workspace settings (optional - uncomment if needed)
+# .vscode/settings.json
+# .vscode/launch.json
