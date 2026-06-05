@@ -1,6 +1,5 @@
 {
     "idf.currentSetup": "/home/musicunauta24/.espressif/v6.0/esp-idf",
-    "cmake.sourceDirectory": "/home/musicunauta24/esp/LABS-IOT/LAB_03",
     "idf.openOcdConfigs": [
         "board/esp32c6-builtin.cfg"
     ]
