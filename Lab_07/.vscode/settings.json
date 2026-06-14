@@ -3,7 +3,7 @@
   "idf.openOcdConfigs": [
     "board/esp32c6-builtin.cfg"
   ],
-  "idf.port": "/dev/ttyACM0",
+  "idf.port": "detect",
   "idf.currentSetup": "/home/musicunauta24/.espressif/v6.0/esp-idf",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32c6"
@@ -12,7 +12,6 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=/home/musicunauta24/esp/LABS-IOT/LAB5/build"
-  ],
-  "idf.flashType": "UART"
+    "--compile-commands-dir=/home/musicunauta24/esp/LABS-IOT/LAB5/Lab_07/build"
+  ]
 }

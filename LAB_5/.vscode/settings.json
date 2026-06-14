@@ -1,6 +1,0 @@
-{
-    "idf.currentSetup": "/home/musicunauta24/.espressif/v6.0/esp-idf",
-    "idf.openOcdConfigs": [
-        "board/esp32c6-builtin.cfg"
-    ]
-}
