@@ -1,0 +1,11 @@
+# 1. Tabla de Particiones Personalizada
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# 2. Soporte para WebSockets
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# 3. Seguridad mbedTLS y Cookies para CoAP (Nombres para v6.0)
+CONFIG_MBEDTLS_SSL_DTLS_SRV=y
+CONFIG_MBEDTLS_SSL_COOKIE_C=y

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT SCADA Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* Estilos base y transiciones */
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            transition: background 0.5s ease;
+        }
+        
+        /* Tema Verde SCADA */
+        body.theme-green {
+            background: linear-gradient(135deg, #1b3a30, #2d5a4c, #75928e);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            border-radius: 1rem;
+        }
+
+        /* Toggle Switch CSS */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #68D391;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #68D391;
+        }
+
+        /* Modal oculto */
+        .modal-hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.95);
+        }
+        .modal-active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+        .modal-transition {
+            transition: all 0.3s ease-in-out;
+        }
+        
+        /* Inputs elegantes */
+        .scada-input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            width: 100%;
+            outline: none;
+        }
+        .scada-input:focus {
+            border-color: #68D391;
+        }
+    </style>
+</head>
+<body class="p-6">
+
+    <div class="max-w-6xl mx-auto space-y-6 relative">
+        
+        <header class="glass-card p-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold tracking-wider"><i class="fa-solid fa-microchip mr-2"></i> ESP32 Control Center</h1>
+                <p class="text-gray-300 text-sm mt-1">Supervisión y Control Local</p>
+            </div>
+            <div class="flex items-center space-x-6">
+                <div id="ws-status" class="flex items-center text-red-400 font-semibold">
+                    <i class="fa-solid fa-circle-xmark mr-2"></i> Desconectado
+                </div>
+                <button id="btn-open-settings" class="text-gray-300 hover:text-white transition-colors duration-200">
+                    <i class="fa-solid fa-gear text-2xl"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="glass-card p-6 flex flex-col items-center justify-center">
+                <i class="fa-solid fa-droplet text-blue-400 text-4xl mb-2"></i>
+                <h2 class="text-lg text-gray-300">Humedad A</h2>
+                <div class="text-4xl font-bold mt-2"><span id="val-hum-a">--</span>%</div>
+            </div>
+            <div class="glass-card p-6 flex flex-col items-center justify-center">
+                <i class="fa-solid fa-seedling text-green-400 text-4xl mb-2"></i>
+                <h2 class="text-lg text-gray-300">Humedad S</h2>
+                <div class="text-4xl font-bold mt-2"><span id="val-hum-s">--</span>%</div>
+            </div>
+            <div class="glass-card p-6 flex flex-col items-center justify-center">
+                <i class="fa-solid fa-water text-cyan-400 text-4xl mb-2"></i>
+                <h2 class="text-lg text-gray-300">Nivel de Agua</h2>
+                <div class="text-4xl font-bold mt-2"><span id="val-level">--</span>%</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="glass-card p-6 flex flex-col items-center justify-between lg:col-span-1">
+                <h2 class="text-xl font-bold w-full text-center border-b border-gray-600 pb-2 mb-4"><i class="fa-solid fa-gears mr-2"></i> Control de Válvula</h2>
+                
+                <div class="flex flex-col items-center mb-6 w-full">
+                    <span class="text-gray-300 mb-2" id="mode-text">Modo: Manual</span>
+                    <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                        <input type="checkbox" name="toggle" id="mode-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                        <label for="mode-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-500 cursor-pointer transition-colors duration-200 ease-in-out"></label>
+                    </div>
+                </div>
+
+                <button id="btn-valve" class="w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 bg-red-600 hover:bg-red-500 text-white shadow-lg">
+                    <i class="fa-solid fa-power-off mr-2"></i> <span id="valve-btn-text">Abrir Válvula</span>
+                </button>
+                <p id="valve-status" class="mt-4 text-sm font-semibold text-red-400">Estado: CERRADA</p>
+            </div>
+
+            <div class="glass-card p-6 lg:col-span-2">
+                <canvas id="realtimeChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 modal-hidden modal-transition">
+        <div class="glass-card w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-600 pb-4 mb-6">
+                <h2 class="text-2xl font-bold"><i class="fa-solid fa-sliders mr-2"></i> Configuraciones del Sistema</h2>
+                <button id="btn-close-settings" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+            </div>
+
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3"><i class="fa-solid fa-palette mr-2"></i> Interfaz</h3>
+                    <div class="flex items-center justify-between bg-black bg-opacity-20 p-4 rounded-lg">
+                        <span>Habilitar Tema Verde</span>
+                        <div class="relative inline-block w-12 align-middle select-none">
+                            <input type="checkbox" id="theme-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200"/>
+                            <label for="theme-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-500 cursor-pointer transition-colors duration-200"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-blue-300 mb-3"><i class="fa-brands fa-telegram mr-2"></i> API Telegram</h3>
+                    <div class="grid grid-cols-1 gap-4 bg-black bg-opacity-20 p-4 rounded-lg">
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-1">Bot Token</label>
+                            <input type="text" id="tg-token" class="scada-input" placeholder="Ej: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-1">Chat ID</label>
+                            <input type="text" id="tg-chatid" class="scada-input" placeholder="Ej: 123456789">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-purple-300 mb-3"><i class="fa-solid fa-database mr-2"></i> Base de Datos InfluxDB</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black bg-opacity-20 p-4 rounded-lg">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm text-gray-300 mb-1">Servidor URL</label>
+                            <input type="text" id="db-url" class="scada-input" placeholder="http://192.168.x.x:8086">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-1">Organización</label>
+                            <input type="text" id="db-org" class="scada-input" placeholder="Mi_Org">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-1">Bucket</label>
+                            <input type="text" id="db-bucket" class="scada-input" placeholder="SCADA_Data">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm text-gray-300 mb-1">Token de Acceso</label>
+                            <input type="password" id="db-token" class="scada-input" placeholder="Pegue su token aquí">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-4 border-t border-gray-600 flex justify-end">
+                    <button id="btn-save-settings" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+                        <i class="fa-solid fa-floppy-disk mr-2"></i> Guardar en ESP32
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let gateway = `ws://${window.location.hostname}/ws`;
+        let websocket;
+        let currentMode = "manual"; 
+        let valveState = 0; 
+
+        // --- CONFIGURACIÓN DE CHART.JS ---
+        const ctx = document.getElementById('realtimeChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Nivel Agua (%)', borderColor: '#22d3ee', backgroundColor: 'rgba(34, 211, 238, 0.1)', data: [], tension: 0.4, fill: true },
+                    { label: 'Hum A (%)', borderColor: '#60a5fa', borderDash: [5, 5], data: [], tension: 0.4 },
+                    { label: 'Hum S (%)', borderColor: '#4ade80', borderDash: [5, 5], data: [], tension: 0.4 }
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    y: { min: 0, max: 100, ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                },
+                plugins: { legend: { labels: { color: '#fff' } } }
+            }
+        });
+
+        // --- INICIALIZACIÓN ---
+        window.addEventListener('load', onLoad);
+
+        function onLoad(event) {
+            initWebSocket();
+            initControlListeners();
+            initModalListeners();
+        }
+
+        // --- LÓGICA DE WEBSOCKETS ---
+        function initWebSocket() {
+            websocket = new WebSocket(gateway);
+            websocket.onopen = onOpen;
+            websocket.onclose = onClose;
+            websocket.onmessage = onMessage;
+        }
+
+        function onOpen(event) {
+            const statusEl = document.getElementById('ws-status');
+            statusEl.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Conectado';
+            statusEl.className = 'flex items-center text-green-400 font-semibold';
+        }
+
+        function onClose(event) {
+            const statusEl = document.getElementById('ws-status');
+            statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark mr-2"></i> Desconectado';
+            statusEl.className = 'flex items-center text-red-400 font-semibold';
+            setTimeout(initWebSocket, 2000);
+        }
+
+        function onMessage(event) {
+            const data = JSON.parse(event.data);
+            
+            if(data.hum_a !== undefined) document.getElementById('val-hum-a').innerText = data.hum_a;
+            if(data.hum_s !== undefined) document.getElementById('val-hum-s').innerText = data.hum_s;
+            if(data.level !== undefined) document.getElementById('val-level').innerText = data.level;
+
+            if(data.mode !== undefined && data.valve !== undefined) syncControls(data.mode, data.valve);
+            if(data.level !== undefined) updateChart(data.level, data.hum_a, data.hum_s);
+        }
+
+        // --- FUNCIONES DE CONTROL PRINCIPAL ---
+        function initControlListeners() {
+            const toggle = document.getElementById('mode-toggle');
+            const btn = document.getElementById('btn-valve');
+
+            toggle.addEventListener('change', (e) => {
+                const newMode = e.target.checked ? "auto" : "manual";
+                sendCmd({ mode: newMode });
+            });
+
+            btn.addEventListener('click', () => {
+                if(currentMode === "manual") {
+                    const newValveState = valveState === 0 ? 1 : 0;
+                    sendCmd({ valve: newValveState });
+                }
+            });
+        }
+
+        function syncControls(mode, valve) {
+            currentMode = mode;
+            valveState = valve;
+            const toggle = document.getElementById('mode-toggle');
+            const modeText = document.getElementById('mode-text');
+            const btn = document.getElementById('btn-valve');
+            const statusText = document.getElementById('valve-status');
+
+            if (mode === "auto") {
+                toggle.checked = true;
+                modeText.innerText = "Modo: Automático";
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                toggle.checked = false;
+                modeText.innerText = "Modo: Manual";
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            if (valve === 1) {
+                btn.innerHTML = '<i class="fa-solid fa-power-off mr-2"></i> Cerrar Válvula';
+                btn.className = btn.className.replace('bg-red-600 hover:bg-red-500', 'bg-green-600 hover:bg-green-500');
+                statusText.innerText = "Estado: ABIERTA";
+                statusText.className = "mt-4 text-sm font-semibold text-green-400";
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-power-off mr-2"></i> Abrir Válvula';
+                btn.className = btn.className.replace('bg-green-600 hover:bg-green-500', 'bg-red-600 hover:bg-red-500');
+                statusText.innerText = "Estado: CERRADA";
+                statusText.className = "mt-4 text-sm font-semibold text-red-400";
+            }
+        }
+
+        // --- LÓGICA DEL MODAL Y CONFIGURACIONES ---
+        function initModalListeners() {
+            const modal = document.getElementById('settings-modal');
+            const btnOpen = document.getElementById('btn-open-settings');
+            const btnClose = document.getElementById('btn-close-settings');
+            const btnSave = document.getElementById('btn-save-settings');
+            const themeToggle = document.getElementById('theme-toggle');
+
+            // Abrir / Cerrar Modal
+            btnOpen.addEventListener('click', () => modal.classList.replace('modal-hidden', 'modal-active'));
+            btnClose.addEventListener('click', () => modal.classList.replace('modal-active', 'modal-hidden'));
+
+            // Cambiar Color de Tema en tiempo real
+            themeToggle.addEventListener('change', (e) => {
+                if(e.target.checked) {
+                    document.body.classList.add('theme-green');
+                } else {
+                    document.body.classList.remove('theme-green');
+                }
+            });
+
+            // Enviar credenciales a la ESP32
+            btnSave.addEventListener('click', () => {
+                const configPayload = {
+                    config_update: true,
+                    tg_token: document.getElementById('tg-token').value,
+                    tg_chat: document.getElementById('tg-chatid').value,
+                    db_url: document.getElementById('db-url').value,
+                    db_org: document.getElementById('db-org').value,
+                    db_bucket: document.getElementById('db-bucket').value,
+                    db_token: document.getElementById('db-token').value
+                };
+                
+                sendCmd(configPayload);
+                
+                // Efecto visual de guardado exitoso
+                btnSave.innerHTML = '<i class="fa-solid fa-check mr-2"></i> Guardado';
+                btnSave.classList.replace('bg-blue-600', 'bg-green-600');
+                
+                setTimeout(() => {
+                    modal.classList.replace('modal-active', 'modal-hidden');
+                    btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i> Guardar en ESP32';
+                    btnSave.classList.replace('bg-green-600', 'bg-blue-600');
+                }, 1000);
+            });
+        }
+
+        function sendCmd(obj) {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify(obj));
+            }
+        }
+
+        function updateChart(level, humA, humS) {
+            const now = new Date();
+            const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+            if (chart.data.labels.length > 20) {
+                chart.data.labels.shift();
+                chart.data.datasets.forEach(dataset => dataset.data.shift());
+            }
+            chart.data.labels.push(timeStr);
+            chart.data.datasets[0].data.push(level);
+            chart.data.datasets[1].data.push(humA);
+            chart.data.datasets[2].data.push(humS);
+            chart.update();
+        }
+    </script>
+</body>
+</html>
