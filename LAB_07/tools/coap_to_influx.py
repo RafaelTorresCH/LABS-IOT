@@ -55,14 +55,30 @@ def log(msg: str) -> None:
 
 
 def run_otctl(*args: str) -> str:
-    cmd = shlex.split(os.environ.get("SOILSENSE_OTCTL", "sudo ot-ctl"))
-    completed = subprocess.run(
-        cmd + list(args),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return completed.stdout.strip()
+    cmd = shlex.split(os.environ.get("SOILSENSE_OTCTL", "ot-ctl"))
+    attempts = [cmd]
+    if cmd[:1] != ["sudo"]:
+        attempts.append(["sudo", "-n"] + cmd)
+
+    last_error: Optional[subprocess.CalledProcessError] = None
+    for attempt in attempts:
+        try:
+            completed = subprocess.run(
+                attempt + list(args),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            lines = [line for line in completed.stdout.splitlines() if line.strip() and line.strip() != "Done"]
+            return "\n".join(lines).strip()
+        except subprocess.CalledProcessError as exc:
+            last_error = exc
+            if attempt and attempt[0] == "sudo":
+                break
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("ot-ctl command failed")
 
 
 def parse_kv_line(output: str, prefix: str) -> Optional[str]:
