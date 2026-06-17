@@ -120,20 +120,23 @@ static size_t cbor_put_tstr(uint8_t *buf, size_t idx, const char *s)
     return idx + len;
 }
 
-static size_t build_health_cbor(uint8_t *buf, size_t max_len, int batt_mv, int rssi_dbm, int64_t uptime_s, const char *role)
+static size_t build_health_cbor(uint8_t *buf, size_t max_len, int batt_mv, int rssi_dbm, int64_t uptime_s,
+                                uint16_t rloc16, const char *role)
 {
     size_t idx = 0;
     if (max_len < 64) {
         return 0;
     }
 
-    buf[idx++] = 0xA4;
+    buf[idx++] = 0xA5;
     idx = cbor_put_tstr(buf, idx, "batt");
     idx = cbor_put_uint(buf, idx, batt_mv > 0 ? (uint64_t)batt_mv : 0);
     idx = cbor_put_tstr(buf, idx, "rssi");
     idx = (rssi_dbm >= 0) ? cbor_put_uint(buf, idx, (uint64_t)rssi_dbm) : cbor_put_nint(buf, idx, (int64_t)rssi_dbm);
     idx = cbor_put_tstr(buf, idx, "up");
     idx = cbor_put_uint(buf, idx, uptime_s > 0 ? (uint64_t)uptime_s : 0);
+    idx = cbor_put_tstr(buf, idx, "rloc16");
+    idx = cbor_put_uint(buf, idx, rloc16);
     idx = cbor_put_tstr(buf, idx, "role");
     idx = cbor_put_tstr(buf, idx, role);
     return idx;
@@ -143,7 +146,9 @@ static void send_health_response(otInstance *instance, const otMessage *request,
 {
     int batt_mv = read_battery_mv();
     int rssi_dbm = -127;
+    int8_t parent_rssi = -127;
     int64_t uptime_s = esp_timer_get_time() / 1000000LL;
+    uint16_t rloc16 = 0;
     otDeviceRole role = OT_DEVICE_ROLE_DISABLED;
     uint8_t payload[64];
     size_t payload_len;
@@ -153,6 +158,12 @@ static void send_health_response(otInstance *instance, const otMessage *request,
 
     esp_openthread_lock_acquire(portMAX_DELAY);
     role = otThreadGetDeviceRole(instance);
+    rloc16 = otThreadGetRloc16(instance);
+    if (otThreadGetParentAverageRssi(instance, &parent_rssi) == OT_ERROR_NONE) {
+        rssi_dbm = parent_rssi;
+    } else if (otThreadGetParentLastRssi(instance, &parent_rssi) == OT_ERROR_NONE) {
+        rssi_dbm = parent_rssi;
+    }
     esp_openthread_lock_release();
 
     switch (role) {
@@ -173,7 +184,7 @@ static void send_health_response(otInstance *instance, const otMessage *request,
         break;
     }
 
-    payload_len = build_health_cbor(payload, sizeof(payload), batt_mv, rssi_dbm, uptime_s, role_str);
+    payload_len = build_health_cbor(payload, sizeof(payload), batt_mv, rssi_dbm, uptime_s, rloc16, role_str);
     if (payload_len == 0) {
         return;
     }

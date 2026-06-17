@@ -72,4 +72,25 @@ This repository now carries the Lab 7 scaffolding as two profiles:
 - Root project: `ot-rcp` for the mini board that acts as the RCP for the Fedora OTBR host.
 - `ftd_battery/`: native-radio FTD battery node with `GET /sys/health` over CoAP.
 
+## Host bridge to InfluxDB
+
+Once the OTBR and the battery node are attached to the same Thread network, run:
+
+```bash
+python3 tools/coap_to_influx.py --once
+```
+
+or keep it running:
+
+```bash
+export SOILSENSE_INFLUX_URL="http://127.0.0.1:8086"
+export SOILSENSE_INFLUX_ORG="your-org"
+export SOILSENSE_INFLUX_BUCKET="your-bucket"
+export SOILSENSE_INFLUX_TOKEN="your-token"
+python3 tools/coap_to_influx.py --interval 30
+```
+
+The bridge auto-discovers the battery node from the OTBR router/neighbor tables,
+polls `GET /sys/health`, and writes `thread_battery` points into InfluxDB.
+
 Build each profile from its own directory with its own `idf.py build`.
