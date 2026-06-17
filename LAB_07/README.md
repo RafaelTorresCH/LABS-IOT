@@ -1,13 +1,9 @@
 | Supported Targets | ESP32-C5 | ESP32-C6 | ESP32-H2 |
 | ----------------- | -------- | -------- | -------- |
 
-# OpenThread Radio Co-Processor (RCP) Example
+# OpenThread Command Line Example
 
-This example demonstrates an [OpenThread Radio Co-Processor](https://openthread.io/platforms/co-processor).
-
-OpenThread RCP doesn't function alone, it needs to work together with a Host and this example covers two common user scenarios:
-- Work with a Host Processor to perform a [Thread Border Router](https://openthread.io/guides/border-router).
-- Work as a [Thread Sniffer](https://openthread.io/guides/pyspinel/sniffer).
+This example demonstrates an [OpenThread CLI](https://github.com/openthread/openthread/blob/master/src/cli/README.md), with some additional features such as TCP, UDP and Iperf.
 
 ## How to use example
 
@@ -17,80 +13,164 @@ To run this example, a board with IEEE 802.15.4 module (for example ESP32-H2) is
 
 ### Configure the project
 
-The default communication interface is port 0 of ESP32-H2 UART running at 460800 baud, change the configuration in [esp_ot_config.h](main/esp_ot_config.h) if you want to use another interface or need different communication parameters.
-
-### RCP Size Optimization Configuration
-
-To optimize the size of the RCP firmware, the following configurations are enabled by default:
-
 ```
-CONFIG_COMPILER_OPTIMIZATION_SIZE=y
-CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
-CONFIG_COMPILER_OPTIMIZATION_CHECKS_SILENT=y
-CONFIG_COMPILER_SAVE_RESTORE_LIBCALLS=y
-CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
-CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
-CONFIG_LOG_DEFAULT_LEVEL_NONE=y
-CONFIG_LIBC_NEWLIB_NANO_FORMAT=y
-CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
-CONFIG_OPENTHREAD_LOG_LEVEL_NONE=y
-```
-Configure them via `idf.py menuconfig` if you need.
-
-The firmware size are as follows (reference value):
-
-```
-                                Before Optimization     After Optimization
-
-esp_ot_rcp.bin for esp32h2          314KB                   184KB
-
-esp_ot_rcp.bin for esp32c6          299KB                   208kb
+idf.py menuconfig
 ```
 
-### Build and Flash
-
-Build the project and flash it to the board:
+The example can run with the default configuration. OpenThread Command Line is enabled with UART as the default interface. Additionally, USB JTAG is also supported and can be activated through the menuconfig:
 
 ```
-idf.py -p <PORT> build flash
+Component config → ESP System Settings → Channel for console output → USB Serial/JTAG Controller
 ```
 
-Now you'll get an OpenThread RCP, you can try the following use cases:
+### Build, Flash, and Run
 
-#### Thread Border Router
+Build the project and flash it to the board, then run monitor tool to view serial output:
 
-Please refer to [ot_br](../ot_br) example for the setup steps.
+```
+idf.py -p PORT build flash monitor
+```
 
-#### Thread Sniffer
+Now you'll get an OpenThread command line shell.
 
-Please refer to [Thread Sniffer](https://openthread.io/guides/pyspinel/sniffer) for the detailed instructions.
+### Example Output
 
-## SoilSense lab profiles
+The `help` command will print all of the supported commands.
+```bash
+esp32h2> ot help
+I(7058) OPENTHREAD:[INFO]-CLI-----: execute command: help
+bbr
+bufferinfo
+ccathreshold
+channel
+child
+childip
+childmax
+childsupervision
+childtimeout
+coap
+contextreusedelay
+counters
+dataset
+delaytimermin
+diag
+discover
+dns
+domainname
+eidcache
+eui64
+extaddr
+extpanid
+factoryreset
+...
+```
 
-This repository now carries the Lab 7 scaffolding as two profiles:
+## Set Up Network
 
-- Root project: `ot-rcp` for the mini board that acts as the RCP for the Fedora OTBR host.
-- `ftd_battery/`: native-radio FTD battery node with `GET /sys/health` over CoAP.
+To run this example, at least two ESP32-H2 boards flashed with this ot_cli example are required.
 
-## Host bridge to InfluxDB
+On the first device, run the following commands:
+```bash
+esp32h2> ot factoryreset
+... # the device will reboot
 
-Once the OTBR and the battery node are attached to the same Thread network, run:
+esp32h2> ot dataset init new
+Done
+esp32h2> ot dataset commit active
+Done
+esp32h2> ot ifconfig up
+Done
+esp32h2> ot thread start
+Done
+
+# After some seconds
+
+esp32h2> ot state
+leader
+Done
+```
+Now the first device has formed a Thread network as a leader. Get some information which will be used in next steps:
+```bash
+esp32h2> ot ipaddr
+fdde:ad00:beef:0:0:ff:fe00:fc00
+fdde:ad00:beef:0:0:ff:fe00:8000
+fdde:ad00:beef:0:a7c6:6311:9c8c:271b
+fe80:0:0:0:5c27:a723:7115:c8f8
+
+# Get the Active Dataset
+esp32h2> ot dataset active -x
+0e080000000000010000000300001835060004001fffe00208fe7bb701f5f1125d0708fd75cbde7c6647bd0510b3914792d44f45b6c7d76eb9306eec94030f4f70656e5468726561642d35383332010258320410e35c581af5029b054fc904a24c2b27700c0402a0fff8
+```
+
+On the second device, set the active dataset from leader, and start Thread interface:
+```bash
+esp32h2> ot factoryreset
+... # the device will reboot
+
+esp32h2> ot dataset set active 0e080000000000010000000300001835060004001fffe00208fe7bb701f5f1125d0708fd75cbde7c6647bd0510b3914792d44f45b6c7d76eb9306eec94030f4f70656e5468726561642d35383332010258320410e35c581af5029b054fc904a24c2b27700c0402a0fff8
+esp32h2> ot ifconfig up
+Done
+esp32h2> ot thread start
+Done
+
+# After some seconds
+
+esp32h2> ot state
+router  # child is also a valid state
+Done
+```
+The second device has joined the Thread network as a router (or a child).
+
+## Extension commands
+
+You can refer to the [extension command](https://github.com/espressif/esp-thread-br/blob/main/components/esp_ot_cli_extension/README.md) about the extension commands.
+
+The following examples are supported by `ot_cli`:
+
+* TCP and UDP Example
+
+## Using iPerf to measure bandwidth
+
+iPerf is a tool used to obtain TCP or UDP throughput on the Thread network. To run iPerf, you need to have two Thread devices on the same network.
+
+Refer to [the iperf-cmd component](https://components.espressif.com/components/espressif/iperf-cmd) for details on specific configurations.
+
+### Typical usage on a thread network
+
+For measuring the TCP throughput, first create an iperf service on one node:
+```bash
+> iperf -V -s -t 20 -i 3 -p 5001 -f k
+Done
+```
+
+Then create an iperf client connecting to the service on another node. Note that the [ML-EID](https://openthread.io/guides/thread-primer/ipv6-addressing#unicast_address_types) address is used for iperf.
 
 ```bash
-python3 tools/coap_to_influx.py --once
+> ipaddr mleid
+fdde:ad00:beef:0:a7c6:6311:9c8c:271b
+Done
+
+> iperf -V -c fdde:ad00:beef:0:a7c6:6311:9c8c:271b -t 20 -i 1 -p 5001 -l 85 -f k
+Done
+[ ID] Interval		Transfer	Bandwidth
+[  1]  0.0- 1.0 sec	3.15 KBytes	25.16 Kbits/sec
+[  1]  1.0- 2.0 sec	2.89 KBytes	23.12 Kbits/sec
+[  1]  2.0- 3.0 sec	2.98 KBytes	23.80 Kbits/sec
+...
+[  1]  9.0-10.0 sec	2.55 KBytes	20.40 Kbits/sec
+[  1]  0.0-10.0 sec	27.80 KBytes	22.24 Kbits/sec
 ```
 
-or keep it running:
+For measuring the UDP throughput, first create an iperf service similarly:
 
 ```bash
-export SOILSENSE_INFLUX_URL="http://127.0.0.1:8086"
-export SOILSENSE_INFLUX_ORG="your-org"
-export SOILSENSE_INFLUX_BUCKET="your-bucket"
-export SOILSENSE_INFLUX_TOKEN="your-token"
-python3 tools/coap_to_influx.py --interval 30
+> iperf -V -u -s -t 20 -i 3 -p 5001 -f k
+Done
 ```
 
-The bridge auto-discovers the battery node from the OTBR router/neighbor tables,
-polls `GET /sys/health`, and writes `thread_battery` points into InfluxDB.
+Then create an iperf client:
 
-Build each profile from its own directory with its own `idf.py build`.
+```bash
+> iperf -V -u -c fdde:ad00:beef:0:a7c6:6311:9c8c:271b -t 20 -i 1 -p 5001 -l 85 -f k
+Done
+```
