@@ -1,0 +1,25 @@
+menu "SoilSense FTD Battery Node"
+
+    config SOILSENSE_BATT_ADC_IO
+        int "GPIO used by the battery divider"
+        default 4
+        range 0 48
+        help
+            Physical GPIO wired to the divider midpoint.
+
+    config SOILSENSE_BATT_DIVIDER_R1_OHM
+        int "Upper divider resistor (ohm)"
+        default 82500
+        range 1 10000000
+
+    config SOILSENSE_BATT_DIVIDER_R2_OHM
+        int "Lower divider resistor (ohm)"
+        default 82500
+        range 1 10000000
+
+    config SOILSENSE_BATT_REPORT_PERIOD_S
+        int "Health report period in seconds"
+        default 30
+        range 5 3600
+
+endmenu

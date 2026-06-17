@@ -64,3 +64,12 @@ Please refer to [ot_br](../ot_br) example for the setup steps.
 #### Thread Sniffer
 
 Please refer to [Thread Sniffer](https://openthread.io/guides/pyspinel/sniffer) for the detailed instructions.
+
+## SoilSense lab profiles
+
+This repository now carries the Lab 7 scaffolding as two profiles:
+
+- Root project: `ot-rcp` for the mini board that acts as the RCP for the Fedora OTBR host.
+- `ftd_battery/`: native-radio FTD battery node with `GET /sys/health` over CoAP.
+
+Build each profile from its own directory with its own `idf.py build`.

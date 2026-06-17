@@ -16,6 +16,8 @@
 #include <unistd.h>
 
 #include "esp_event.h"
+#include "esp_app_desc.h"
+#include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_openthread.h"
 #include "esp_ot_config.h"
@@ -39,6 +41,8 @@ extern void otAppNcpInit(otInstance *instance);
 
 void app_main(void)
 {
+    ESP_LOGI(TAG, "SoilSense Golden Master v%s", esp_app_get_description()->version);
+
     // Used eventfds:
     // * ot task queue
     // * radio driver
