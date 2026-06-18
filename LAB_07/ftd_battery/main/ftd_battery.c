@@ -17,6 +17,7 @@
 #include "esp_timer.h"
 #include "esp_vfs_eventfd.h"
 #include "nvs_flash.h"
+#include "openthread/link.h"
 #include "openthread/dataset.h"
 #include "openthread/coap.h"
 #include "openthread/logging.h"
@@ -39,6 +40,70 @@ static bool s_adc_cali_ready;
 static adc_unit_t s_adc_unit_id;
 static adc_channel_t s_adc_channel;
 static otCoapResource s_health_resource;
+
+static const char *thread_role_to_str(otDeviceRole role)
+{
+    switch (role) {
+    case OT_DEVICE_ROLE_CHILD:
+        return "child";
+    case OT_DEVICE_ROLE_ROUTER:
+        return "router";
+    case OT_DEVICE_ROLE_LEADER:
+        return "leader";
+    case OT_DEVICE_ROLE_DETACHED:
+        return "detached";
+    default:
+        return "disabled";
+    }
+}
+
+static void force_child_role(void)
+{
+    otInstance *instance = esp_openthread_get_instance();
+    otError error;
+
+    if (instance == NULL) {
+        return;
+    }
+
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    error = otThreadBecomeChild(instance);
+    esp_openthread_lock_release();
+
+    if (error != OT_ERROR_NONE) {
+        ESP_LOGW(TAG, "otThreadBecomeChild returned %d", error);
+    }
+}
+
+static void log_thread_identity(void)
+{
+    otInstance *instance = esp_openthread_get_instance();
+    const otExtAddress *extaddr = NULL;
+    otDeviceRole role = OT_DEVICE_ROLE_DISABLED;
+    uint16_t rloc16 = 0;
+
+    if (instance == NULL) {
+        return;
+    }
+
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    role = otThreadGetDeviceRole(instance);
+    rloc16 = otThreadGetRloc16(instance);
+    extaddr = otLinkGetExtendedAddress(instance);
+    esp_openthread_lock_release();
+
+    if (extaddr == NULL) {
+        ESP_LOGI(TAG, "Thread role=%s rloc16=0x%04x", thread_role_to_str(role), rloc16);
+        return;
+    }
+
+    ESP_LOGI(TAG,
+             "Thread role=%s rloc16=0x%04x extaddr=%02x%02x%02x%02x%02x%02x%02x%02x",
+             thread_role_to_str(role),
+             rloc16,
+             extaddr->m8[0], extaddr->m8[1], extaddr->m8[2], extaddr->m8[3],
+             extaddr->m8[4], extaddr->m8[5], extaddr->m8[6], extaddr->m8[7]);
+}
 
 static void start_thread_from_active_dataset(void)
 {
@@ -275,6 +340,7 @@ static void ot_task_worker(void *arg)
     esp_openthread_lock_release();
 #endif
     start_thread_from_active_dataset();
+    force_child_role();
     ESP_ERROR_CHECK(otCoapStart(esp_openthread_get_instance(), COAP_PORT));
     s_health_resource.mUriPath = HEALTH_URI;
     s_health_resource.mHandler = coap_health_handler;
@@ -282,13 +348,14 @@ static void ot_task_worker(void *arg)
     s_health_resource.mNext = NULL;
     otCoapAddResource(esp_openthread_get_instance(), &s_health_resource);
 
-    ESP_LOGI(TAG, "FTD battery node booted; exposing coap://[addr]/%s", HEALTH_URI);
+    log_thread_identity();
+    ESP_LOGI(TAG, "Battery node booted; exposing coap://[addr]/%s", HEALTH_URI);
     esp_openthread_launch_mainloop();
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "SoilSense FTD Battery Node v%s", esp_app_get_description()->version);
+    ESP_LOGI(TAG, "SoilSense Battery Node v%s", esp_app_get_description()->version);
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

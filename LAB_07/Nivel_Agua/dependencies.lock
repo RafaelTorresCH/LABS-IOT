@@ -1,92 +1,19 @@
 dependencies:
-  cmd_system:
-    dependencies: []
-    source:
-      path: C:\Users\USUARIO\esp\v5.5.3\esp-idf\examples\system\console\advanced\components\cmd_system
-      type: local
-    version: '*'
   espressif/coap:
-    component_hash: fa573d92bc097700b35b593dfd2530205b90453d41e6f07f834252ab16120628
     dependencies:
     - name: idf
-      require: private
       version: '>=4.4'
     source:
-      registry_url: https://components.espressif.com/
-      type: service
+      path: managed_components/espressif__coap
+      type: local
     version: 4.3.5~6
-  espressif/esp_ot_cli_extension:
-    component_hash: 1f2cc33cca0d2c50d5f5af13b65c1a6c07453258317f034f1a20e84a2f2dbcc7
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.0.3
-  espressif/iperf:
-    component_hash: 7ee222b87da6e69118814a1e04fbc6e0af6814cdd364f7f51cb58770d2478224
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.3'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.2
-  espressif/iperf-cmd:
-    component_hash: 112e912c230db6e8863194854950a83d8ed042101d9c57ebdfab8a505c8d8c21
-    dependencies:
-    - name: espressif/iperf
-      registry_url: https://components.espressif.com
-      require: private
-      version: =1.0.2
-    - name: idf
-      require: private
-      version: '>=4.3'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.2
-  espressif/led_strip:
-    component_hash: 28c6509a727ef74925b372ed404772aeedf11cce10b78c3f69b3c66799095e2d
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.5.5
   idf:
     source:
       type: idf
-    version: 5.5.3
-  ot_examples_common:
-    dependencies:
-    - name: espressif/iperf-cmd
-      version: ^1.0.0
-    - name: cmd_system
-      path: ${IDF_PATH}/examples/system/console/advanced/components/cmd_system
-    source:
-      path: C:\Users\USUARIO\esp\v5.5.3\esp-idf\examples\openthread\ot_common_components\ot_examples_common
-      type: local
-    version: '*'
-  ot_led:
-    dependencies:
-    - name: espressif/led_strip
-      version: ^2.4.1
-    source:
-      path: C:\Users\USUARIO\esp\v5.5.3\esp-idf\examples\openthread\ot_common_components\ot_led
-      type: local
-    version: '*'
+    version: 6.0.0
 direct_dependencies:
 - espressif/coap
-- espressif/esp_ot_cli_extension
 - idf
-- ot_examples_common
-- ot_led
-manifest_hash: 3a4ffd7e8add88a99753b2b8fa8274acc5dc70f224ae7711a983c1f8724d60df
+manifest_hash: c5edaa1a8210986981009b91a236417c4e28625cd8dfdb23625e8910d55058a3
 target: esp32c6
-version: 2.0.0
+version: 3.0.0

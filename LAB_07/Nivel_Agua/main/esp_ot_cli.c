@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -29,7 +30,12 @@
 #include "esp_ot_config.h"
 #include "esp_vfs_eventfd.h"
 #include "nvs_flash.h"
-#include "ot_examples_common.h"
+#include "openthread/link.h"
+#include "openthread/thread.h"
+
+#if CONFIG_OPENTHREAD_FTD
+#include "openthread/thread_ftd.h"
+#endif
 
 #if CONFIG_OPENTHREAD_STATE_INDICATOR_ENABLE
 #include "ot_led_strip.h"
@@ -60,6 +66,69 @@ void start_water_level_pump(void);
 // Node A: SOILSENSE_ROLE_SENSOR, Node B: SOILSENSE_ROLE_CLIENT, Node V: SOILSENSE_ROLE_VALVE.
 #define SOILSENSE_NODE_ROLE SOILSENSE_ROLE_WATER_PUMP
 
+static void configure_thread_child(void)
+{
+#if CONFIG_OPENTHREAD_FTD
+    otInstance *instance = esp_openthread_get_instance();
+
+    if (instance == NULL) {
+        return;
+    }
+
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    otThreadSetRouterEligible(instance, false);
+    esp_openthread_lock_release();
+#else
+    ESP_LOGI(TAG, "MTD build selected; node will attach as child");
+#endif
+}
+
+static const char *thread_role_to_str(otDeviceRole role)
+{
+    switch (role) {
+    case OT_DEVICE_ROLE_CHILD:
+        return "child";
+    case OT_DEVICE_ROLE_ROUTER:
+        return "router";
+    case OT_DEVICE_ROLE_LEADER:
+        return "leader";
+    case OT_DEVICE_ROLE_DETACHED:
+        return "detached";
+    default:
+        return "disabled";
+    }
+}
+
+static void log_thread_identity(void)
+{
+    otInstance *instance = esp_openthread_get_instance();
+    const otExtAddress *extaddr = NULL;
+    otDeviceRole role = OT_DEVICE_ROLE_DISABLED;
+    uint16_t rloc16 = 0;
+
+    if (instance == NULL) {
+        return;
+    }
+
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    role = otThreadGetDeviceRole(instance);
+    rloc16 = otThreadGetRloc16(instance);
+    extaddr = otLinkGetExtendedAddress(instance);
+    esp_openthread_lock_release();
+
+    if (extaddr == NULL) {
+        ESP_LOGI(TAG, "Thread role=%s rloc16=0x%04x", thread_role_to_str(role), rloc16);
+        return;
+    }
+
+    ESP_LOGI(TAG,
+             "Thread role=%s rloc16=0x%04x extaddr=%02x%02x%02x%02x%02x%02x%02x%02x",
+             thread_role_to_str(role),
+             rloc16,
+             extaddr->m8[0], extaddr->m8[1], extaddr->m8[2], extaddr->m8[3],
+             extaddr->m8[4], extaddr->m8[5], extaddr->m8[6], extaddr->m8[7]);
+}
+
 void app_main(void)
 {
 #if SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_GATEWAY
@@ -69,10 +138,6 @@ void app_main(void)
 #elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_SENSOR_MQTT
     ESP_LOGI(TAG, "SoilSense sensor MQTT role selected; local measurements enabled");
     start_sensor_mqtt_node();
-    return;
-#elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_WATER_PUMP
-    ESP_LOGI(TAG, "SoilSense water level role selected; pump control enabled");
-    start_water_level_pump();
     return;
 #endif
 
@@ -104,6 +169,7 @@ void app_main(void)
     };
 
     ESP_ERROR_CHECK(esp_openthread_start(&config));
+    configure_thread_child();
 #if CONFIG_OPENTHREAD_CLI_ESP_EXTENSION
     esp_cli_custom_command_init();
 #endif
@@ -113,9 +179,14 @@ void app_main(void)
 #if CONFIG_OPENTHREAD_NETWORK_AUTO_START
     ot_network_auto_start();
 #endif
+    log_thread_identity();
 #if SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_SENSOR
     start_coap_server();
 #elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_VALVE
+    start_valve_server();
+#elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_WATER_PUMP
+    ESP_LOGI(TAG, "SoilSense water level role selected; pump control enabled");
+    start_water_level_pump();
     start_valve_server();
 #else
     ESP_LOGI(TAG, "SoilSense client role selected; no local CoAP server started");
