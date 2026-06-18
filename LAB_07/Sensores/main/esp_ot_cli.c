@@ -30,6 +30,7 @@
 #include "esp_ot_config.h"
 #include "esp_vfs_eventfd.h"
 #include "nvs_flash.h"
+#include "openthread/dataset.h"
 #include "openthread/link.h"
 #include "openthread/thread.h"
 
@@ -79,6 +80,17 @@ static void configure_thread_child(void)
 #else
     ESP_LOGI(TAG, "MTD build selected; node will attach as child");
 #endif
+}
+
+static void start_thread_from_active_dataset(void)
+{
+    otOperationalDatasetTlvs dataset = {0};
+    otError error;
+
+    esp_openthread_lock_acquire(portMAX_DELAY);
+    error = otDatasetGetActiveTlvs(esp_openthread_get_instance(), &dataset);
+    ESP_ERROR_CHECK(esp_openthread_auto_start((error == OT_ERROR_NONE) ? &dataset : NULL));
+    esp_openthread_lock_release();
 }
 
 static const char *thread_role_to_str(otDeviceRole role)
@@ -164,15 +176,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_openthread_start(&config));
     configure_thread_child();
-#if CONFIG_OPENTHREAD_CLI_ESP_EXTENSION
-    esp_cli_custom_command_init();
-#endif
-#if CONFIG_OPENTHREAD_STATE_INDICATOR_ENABLE
-    ESP_ERROR_CHECK(esp_openthread_state_indicator_init(esp_openthread_get_instance()));
-#endif
-#if CONFIG_OPENTHREAD_NETWORK_AUTO_START
-    ot_network_auto_start();
-#endif
+    start_thread_from_active_dataset();
     log_thread_identity();
 #if SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_SENSOR
     start_coap_server();

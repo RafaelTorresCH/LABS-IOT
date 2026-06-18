@@ -1,6 +1,6 @@
 ## IDF Component Manager Manifest File
 dependencies:
   espressif/coap:
-    path: ../managed_components/espressif__coap
+    path: ../../Nivel_Agua/managed_components/espressif__coap
   idf:
     version: ">=4.1.0"

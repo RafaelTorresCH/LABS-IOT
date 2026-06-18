@@ -4,7 +4,7 @@ dependencies:
     - name: idf
       version: '>=4.4'
     source:
-      path: managed_components/espressif__coap
+      path: ../Nivel_Agua/managed_components/espressif__coap
       type: local
     version: 4.3.5~6
   idf:
@@ -14,6 +14,6 @@ dependencies:
 direct_dependencies:
 - espressif/coap
 - idf
-manifest_hash: c5edaa1a8210986981009b91a236417c4e28625cd8dfdb23625e8910d55058a3
+manifest_hash: 8006322d0378429fc6d7763311cc65c75ab0bda9620913c4f1ea509d5e513556
 target: esp32c6
 version: 3.0.0
