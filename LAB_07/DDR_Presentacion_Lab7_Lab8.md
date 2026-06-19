@@ -1,5 +1,11 @@
 # Design & Decision Record (DDR)
-**GreenField Technologies | SoilSense**
+**GreenField Technologies | IoT Systems Design**
+
+**Team Members:**
+1. María de los Ángeles Prieto Ortega
+2. Mariana Zuluaga Yepes
+3. Fabian de Jesus Perez Salazar
+4. Rafael Ricardo Torres Choperena
 
 **Título del trabajo:** Integración de Thread, OTBR, telemetría operacional y puente hacia dashboard con persistencia histórica
 
