@@ -72,6 +72,12 @@ Aunque el usuario final no interactúa con Thread ni con OTBR directamente, esta
 
 La estrategia elegida favorece continuidad tecnológica y menor dependencia: la red local sigue usando protocolos abiertos como Thread y CoAP, mientras que el dashboard y la persistencia histórica quedan desacoplados a través de un bridge que traduce formatos.
 
+### To Business Manager
+
+Desde la perspectiva de negocio, SoilSense aporta valor porque reduce supervisión manual, concentra la información en una sola interfaz y habilita reacción remota ante eventos relevantes. En lugar de que el operador tenga que revisar nodo por nodo dentro de la malla, el sistema construye una salida consolidada hacia un dashboard y una base histórica.
+
+Esto tiene implicaciones económicas importantes aunque en esta fase no se hayan cerrado todavía todas las cifras finales: menor tiempo de inspección, menor costo de operación manual, mejor trazabilidad para decisiones y una arquitectura modular que protege la inversión porque permite cambiar nodos, ampliar sensores o sustituir el dashboard sin rehacer toda la solución.
+
 ---
 
 # 3. Architecture Decision Records (ADRs)
@@ -151,6 +157,29 @@ Usar:
 - CoAP/CBOR es eficiente para nodos restringidos.
 - JSON simplifica integración con frontend y middlewares existentes.
 - La traducción en el bridge evita imponer costos de texto a los nodos embebidos.
+
+### Status
+
+* **Status:** [ ] Proposed | [x] Accepted | [ ] Deprecated
+
+---
+
+## ADR-010: Priorizar bajo costo de integración y protección de inversión existente
+
+### Context
+
+El proyecto ya contaba con una carpeta `sample_project-main/` funcional para dashboard y persistencia histórica. Reemplazar o rehacer ese componente habría incrementado tiempo, costo de integración y riesgo técnico.
+
+### Decision
+
+Se decidió integrar SoilSense con el dashboard existente mediante adaptación en el borde, manteniendo intacta la carpeta de aplicación principal siempre que fuera posible.
+
+### Rationale
+
+- Disminuye costo de desarrollo incremental.
+- Reduce riesgo de regresión sobre un sistema ya funcional.
+- Protege la inversión en frontend, almacenamiento e interfaz de usuario.
+- Permite que el valor nuevo provenga de la red Thread y del bridge, no de rehacer capas que ya cumplen su objetivo.
 
 ### Status
 
@@ -272,7 +301,105 @@ Esto es importante para que el usuario sepa en qué punto los datos abandonan la
 
 ---
 
-# 9. Trustworthiness Audit
+# 9. Business Viewpoint
+
+## 9.1 Stakeholders de negocio
+
+| Stakeholder | Interés principal en este proyecto |
+|-------------|------------------------------------|
+| Business Manager | generación de valor, reducción de costos operativos, escalabilidad del servicio |
+| System Owner | disponibilidad, mantenimiento, sostenibilidad y protección de la inversión |
+| Architect | modularidad, interoperabilidad, extensibilidad y coherencia técnica |
+| Usuario final | monitoreo simple, alertas, históricos y control remoto |
+
+## 9.2 Business concerns
+
+Este trabajo responde a tres preocupaciones centrales del Business Viewpoint:
+
+1. cómo las capacidades del sistema generan valor real para la operación,
+2. cómo la arquitectura habilita nuevos servicios y crecimiento futuro,
+3. cómo las decisiones técnicas impactan costo, riesgo y sostenibilidad del sistema.
+
+## 9.3 Objetivos de negocio
+
+- Reducir la necesidad de supervisión manual continua.
+- Centralizar la información del sistema en una única interfaz.
+- Permitir control remoto de actuadores cuando sea necesario.
+- Mantener históricos para análisis y trazabilidad.
+- Aumentar la disponibilidad percibida del servicio mediante observabilidad y red mallada.
+- Proteger la inversión usando protocolos abiertos y una arquitectura modular.
+- Habilitar crecimiento futuro con nuevos sensores, nodos o dashboards sin rediseño completo.
+
+## 9.4 Variables económicas y de costo relevantes
+
+En este caso, las variables económicas más pertinentes no son solo el costo del hardware, sino el costo total de operación e integración:
+
+| Variable económica | Relevancia en SoilSense | Impacto esperado |
+|--------------------|-------------------------|------------------|
+| Costo de hardware por nodo | uso de ESP32-C6 y componentes de laboratorio | contenido y replicable |
+| Costo de integración | reutilización del dashboard existente | menor retrabajo y menor riesgo |
+| Costo de supervisión manual | inspecciones físicas y revisión nodo a nodo | disminuye con dashboard centralizado |
+| Costo por falla operativa | pérdida de visibilidad, decisiones tardías, posibles eventos no detectados | disminuye con telemetría operacional |
+| Costo de escalamiento | agregar nuevos nodos o servicios | menor por modularidad y protocolos abiertos |
+| Costo de mantenimiento futuro | actualizaciones, cambios de firmware, reemplazo de nodos | menor al separar perfiles y contratos |
+| Costo de dependencia tecnológica | quedar atado a una plataforma propietaria | menor por usar Thread, CoAP, MQTT e InfluxDB |
+
+## 9.5 Propuesta de valor
+
+La propuesta de valor de SoilSense es convertir una red de nodos IoT restringidos en un servicio observable y operable desde fuera de la malla, sin perder eficiencia en el borde.
+
+El sistema aporta valor porque:
+
+- transforma lecturas distribuidas en información centralizada,
+- permite detectar estado del sistema y no solo del cultivo,
+- habilita control remoto,
+- conserva históricos para análisis,
+- y prepara una base real para operación escalable.
+
+## 9.6 Implicaciones de negocio
+
+### Eficiencia operativa
+
+La arquitectura reduce la necesidad de conectarse manualmente a cada nodo para inspeccionar estado o lecturas. Esto ahorra tiempo de operación y reduce fricción de soporte.
+
+### Visibilidad del sistema
+
+El dashboard y la telemetría operacional permiten saber no solo qué mide el sistema, sino si el sistema mismo está sano. Eso mejora la capacidad de respuesta y reduce incertidumbre operativa.
+
+### Toma de decisiones basada en datos
+
+La salida hacia InfluxDB aporta trazabilidad e históricos, lo que permite analizar comportamiento y justificar decisiones con datos acumulados.
+
+### Escalabilidad
+
+El uso de Thread, CoAP, MQTT y una capa de bridge desacoplada facilita incorporar nuevos nodos o nuevos consumidores externos sin reconstruir la arquitectura.
+
+### Interoperabilidad
+
+La elección de tecnologías abiertas protege la inversión y evita dependencia innecesaria de soluciones cerradas.
+
+## 9.7 Riesgos de negocio
+
+| Riesgo | Impacto posible | Estado |
+|--------|-----------------|--------|
+| Inestabilidad del OTBR | interrupción del acceso entre malla y servicios externos | identificado |
+| Falla de sensores o actuadores | decisiones erróneas o pérdida de control | identificado |
+| Falla del dashboard o base histórica | pérdida de visualización o trazabilidad temporal | identificado |
+| Saturación o mala integración | degradación del servicio y retrasos | mitigado parcialmente con separación por capas |
+| Dependencia de un único host Fedora | punto fuerte de operación, pero también punto crítico | identificado |
+
+## 9.8 Estrategias de mitigación
+
+- Separar firmwares por rol para reducir errores de despliegue.
+- Mantener el dashboard estable y adaptar el borde mediante un bridge.
+- Usar pruebas automáticas para repetir validaciones.
+- Documentar contratos y puertos de despliegue.
+- Migrar a identificadores seriales persistentes `by-id` para reducir errores operativos.
+- Completar validación final de estabilidad OTBR antes del cierre definitivo.
+
+---
+
+# 10. Trustworthiness Audit
 
 ## Closed or improved gaps
 
@@ -292,7 +419,7 @@ El sistema está bien encaminado a nivel de arquitectura y software de integraci
 
 ---
 
-# 10. Construction Viewpoint - IoT System Pattern
+# 11. Construction Viewpoint - IoT System Pattern
 
 | Pattern Element | Category | SoilSense Implementation |
 |---|---|---|
@@ -314,7 +441,7 @@ El sistema está bien encaminado a nivel de arquitectura y software de integraci
 
 ---
 
-# 11. Estado actual de la implementación
+# 12. Estado actual de la implementación
 
 ## Implementado en el repositorio
 
@@ -342,20 +469,20 @@ El sistema está bien encaminado a nivel de arquitectura y software de integraci
 
 ---
 
-# 12. Conclusiones para la presentación
+# 13. Conclusiones para la presentación
 
 1. El trabajo no se limitó a “conectar placas”; se diseñó una arquitectura IoT por capas con separación clara entre red restringida, borde y consumo externo.
 2. La decisión más importante fue no romper el dashboard existente, sino integrar la malla Thread hacia él mediante un bridge explícito y mantenible.
 3. El sistema ya tiene base real para observabilidad, persistencia histórica e integración futura con el proyecto final.
-4. El principal punto abierto no es de diseño sino de estabilización final del OTBR y validación hardware completa.
-5. Desde el punto de vista docente, este trabajo sí responde a los ejes de Lab 7 y Lab 8: OMD, Usage, RAID interchange, Business viewpoint y Construction viewpoint.
+4. Desde el punto de vista económico, el valor principal está en reducir supervisión manual, reutilizar infraestructura existente y proteger la inversión con una arquitectura modular y abierta.
+5. El principal punto abierto no es de diseño sino de estabilización final del OTBR y validación hardware completa.
+6. Desde el punto de vista docente, este trabajo sí responde a los ejes de Lab 7 y Lab 8: OMD, Usage, RAID interchange, Business viewpoint y Construction viewpoint.
 
 ---
 
-# 13. Recomendaciones de cierre
+# 14. Recomendaciones de cierre
 
 - Completar una corrida final de validación OTBR con puertos seriales fijados por `by-id`.
 - Registrar evidencia de `ot-ctl state`, `child table`, `router table` y lecturas CoAP de cada nodo.
 - Tomar capturas del flujo hacia el dashboard y del almacenamiento histórico en InfluxDB.
 - Añadir al cierre de la presentación una diapositiva breve de “riesgos abiertos y siguiente paso”.
-
