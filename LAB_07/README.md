@@ -178,8 +178,9 @@ Done
 
 ### Scope
 
-This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keeping the firmware roles separated and the dashboard reusable. The current deliverable focuses on:
+This workspace implements the Lab 5, Lab 7 and Lab 8 backbone for SoilSense while keeping the firmware roles separated and the dashboard reusable. The current deliverable focuses on:
 
+- an OpenThread Border Router deployment path on Fedora
 - a Thread Border Router host on Fedora
 - a mini board acting as the OpenThread RCP
 - a separate ESP32-C6 FTD battery node
@@ -192,6 +193,7 @@ This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keepi
 - Two firmware profiles are kept separate because the radio co-processor and the battery node have different responsibilities, flash targets, and serial ports.
 - The RCP is flashed to `/dev/ttyACM0` and only serves as radio hardware for the OTBR host.
 - The battery node is flashed to `/dev/ttyACM1` and exposes `GET /sys/health` over CoAP.
+- The OTBR remains the boundary between the proximity network (Thread) and the access network (Wi-Fi/Ethernet), which is the core architectural concern of Lab 5.
 - The battery node reports a small CBOR map with `batt`, `rssi`, `up`, `rloc16`, and `role`. This keeps the payload compact and easy to consume from a bridge.
 - The sensor and actuator nodes are polled from Fedora over Thread CoAP, not through custom dashboard firmware changes. This keeps `sample_project-main/` intact.
 - The SCADA integration is performed by a host-side adapter that converts CoAP + CBOR telemetry into the JSON that the dashboard already expects on `POST /sensores`.
@@ -215,15 +217,22 @@ This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keepi
 ### Verification flow
 
 1. Build and flash the mini RCP board from `main/`.
-2. Build and flash the battery node from `ftd_battery/`.
-3. Start `otbr-agent` on Fedora and confirm the Thread topology shows the router and the FTD child/router.
-4. Run the battery bridge once if you want to validate the Lab 7 telemetry path:
+2. Start `otbr-agent` on Fedora and confirm the OTBR is up, has an active dataset, and exposes prefixes and IPv6 addresses.
+3. Run the Lab 5 validation suite:
+
+```bash
+python3 tools/test_lab7_lab8.py lab5
+```
+
+4. Build and flash the battery node from `ftd_battery/`.
+5. Confirm the Thread topology shows the router and the FTD child/router.
+6. Run the battery bridge once if you want to validate the Lab 7 telemetry path:
 
 ```bash
 python3 tools/coap_to_influx.py --once
 ```
 
-5. Run the dashboard bridge once if you want to validate the SCADA path without changing `sample_project-main/`:
+7. Run the dashboard bridge once if you want to validate the SCADA path without changing `sample_project-main/`:
 
 ```bash
 python3 tools/thread_to_scada_bridge.py \
@@ -231,6 +240,23 @@ python3 tools/thread_to_scada_bridge.py \
   --sensor-addr <IPv6_SENSOR_THREAD> \
   --water-addr <IPv6_WATER_THREAD> \
   --once
+```
+
+Before going live, you can validate the payload generation without needing the
+real nodes:
+
+```bash
+python3 tools/thread_to_scada_bridge.py --simulate --dry-run --once
+```
+
+You can also validate real Thread reads without sending anything to the
+dashboard:
+
+```bash
+python3 tools/thread_to_scada_bridge.py \
+  --sensor-addr <IPv6_SENSOR_THREAD> \
+  --water-addr <IPv6_WATER_THREAD> \
+  --dry-run --once
 ```
 
 This sends a JSON document like:
@@ -243,9 +269,10 @@ This sends a JSON document like:
 }
 ```
 
-6. Run the automated checks:
+8. Run the automated checks:
 
 ```bash
+python3 tools/test_lab7_lab8.py lab5
 python3 tools/test_lab7_lab8.py lab8
 python3 tools/test_lab7_lab8.py lab7
 python3 tools/test_scada_bridge.py
@@ -268,5 +295,15 @@ Those values are generated from Thread CoAP telemetry as follows:
 - `GET /env/temp` on the sensor node provides `h_x10` and `soil_x10`
 - `GET /nivel` on the water node provides `level`
 - the host bridge rounds and remaps them into the dashboard JSON
+
+The bridge also accepts alternate keys such as `temp_c`,
+`temperature_c`, `air_humidity_pct`, `soil_humidity_pct`, and
+`water_level_pct`, then sanitizes the values before forwarding:
+
+- humidity is clamped to `0..100`
+- water level is clamped to `0..100`
+- optional metadata such as `temp_c`, `pump`, source addresses and
+  timestamps is added by default
+- `--no-meta` sends only the three keys required by the dashboard
 
 Build each profile from its own directory with its own `idf.py build`.

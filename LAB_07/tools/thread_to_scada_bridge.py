@@ -23,7 +23,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON_PATH = ROOT / "tools" / "coap_to_influx.py"
@@ -40,6 +40,8 @@ COAP_CODE_CHANGED = 68  # 2.04
 COAP_OPT_URI_PATH = 11
 COAP_OPT_CONTENT_FORMAT = 12
 COAP_CONTENT_FORMAT_JSON = 50
+DEFAULT_DASHBOARD_PORT = common.COAP_PORT
+DEFAULT_INTERVAL_S = 5
 
 
 @dataclass
@@ -48,6 +50,7 @@ class SensorSnapshot:
     air_humidity_pct: float
     soil_humidity_pct: float
     source_addr: str
+    node_id: str = "sensor"
 
 
 @dataclass
@@ -56,6 +59,7 @@ class WaterSnapshot:
     pump_on: int
     raw_state: int
     source_addr: str
+    node_id: str = "water"
 
 
 def log(msg: str) -> None:
@@ -79,7 +83,7 @@ def _encode_option(delta: int, value: bytes) -> bytes:
     return bytes([first]) + delta_ext + length_ext + value
 
 
-def coap_post_json(host: str, uri_path: str, payload: Dict[str, Any], timeout_s: float = 5.0) -> None:
+def coap_post_json(host: str, uri_path: str, payload: Dict[str, Any], timeout_s: float = 5.0, port: int = DEFAULT_DASHBOARD_PORT) -> None:
     token = random.randbytes(4) if hasattr(random, "randbytes") else os.urandom(4)
     msg_id = random.randint(0, 0xFFFF)
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -103,7 +107,7 @@ def coap_post_json(host: str, uri_path: str, payload: Dict[str, Any], timeout_s:
     packet = header + options + b"\xFF" + body
 
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
-    target = (host, common.COAP_PORT, 0, 0) if family == socket.AF_INET6 else (host, common.COAP_PORT)
+    target = (host, port, 0, 0) if family == socket.AF_INET6 else (host, port)
 
     with socket.socket(family, socket.SOCK_DGRAM) as sock:
         sock.settimeout(timeout_s)
@@ -124,6 +128,45 @@ def coap_post_json(host: str, uri_path: str, payload: Dict[str, Any], timeout_s:
             return
 
 
+def clamp_int(value: int, lower: int, upper: int) -> int:
+    return max(lower, min(upper, value))
+
+
+def _scaled_tenth(decoded: Dict[str, Any], primary_key: str, fallback_keys: Tuple[str, ...] = ()) -> float:
+    if primary_key in decoded:
+        return float(int(decoded[primary_key]) / 10.0)
+    for key in fallback_keys:
+        if key in decoded:
+            return float(decoded[key])
+    raise KeyError(f"Missing telemetry field: {primary_key}")
+
+
+def _safe_node_id(decoded: Dict[str, Any], default: str) -> str:
+    value = decoded.get("node", default)
+    text = str(value).strip()
+    return text or default
+
+
+def _sanitize_sensor_snapshot(sensor: SensorSnapshot) -> SensorSnapshot:
+    return SensorSnapshot(
+        temperature_c=round(sensor.temperature_c, 1),
+        air_humidity_pct=float(clamp_int(int(round(sensor.air_humidity_pct)), 0, 100)),
+        soil_humidity_pct=float(clamp_int(int(round(sensor.soil_humidity_pct)), 0, 100)),
+        source_addr=sensor.source_addr,
+        node_id=sensor.node_id,
+    )
+
+
+def _sanitize_water_snapshot(water: WaterSnapshot) -> WaterSnapshot:
+    return WaterSnapshot(
+        level_pct=clamp_int(int(round(water.level_pct)), 0, 100),
+        pump_on=1 if int(water.pump_on) else 0,
+        raw_state=1 if int(water.raw_state) else 0,
+        source_addr=water.source_addr,
+        node_id=water.node_id,
+    )
+
+
 def _addr_from_env(name_addr: str, name_rloc16: str) -> Optional[str]:
     addr = os.environ.get(name_addr)
     if addr:
@@ -136,12 +179,14 @@ def _addr_from_env(name_addr: str, name_rloc16: str) -> Optional[str]:
 
 def decode_sensor_payload(payload: bytes, source_addr: str) -> SensorSnapshot:
     decoded = common.parse_health_payload(payload)
-    return SensorSnapshot(
-        temperature_c=float(int(decoded.get("t_x10", 0)) / 10.0),
-        air_humidity_pct=float(int(decoded.get("h_x10", 0)) / 10.0),
-        soil_humidity_pct=float(int(decoded.get("soil_x10", 0)) / 10.0),
+    snapshot = SensorSnapshot(
+        temperature_c=_scaled_tenth(decoded, "t_x10", ("temp_c", "temperature_c")),
+        air_humidity_pct=_scaled_tenth(decoded, "h_x10", ("hum_a", "air_humidity_pct")),
+        soil_humidity_pct=_scaled_tenth(decoded, "soil_x10", ("hum_s", "soil_humidity_pct")),
         source_addr=source_addr,
+        node_id=_safe_node_id(decoded, "sensor"),
     )
+    return _sanitize_sensor_snapshot(snapshot)
 
 
 def decode_water_payload(payload: bytes, source_addr: str) -> WaterSnapshot:
@@ -149,24 +194,37 @@ def decode_water_payload(payload: bytes, source_addr: str) -> WaterSnapshot:
     level = decoded.get("level")
     if level is None and "level_x10" in decoded:
         level = int(decoded["level_x10"]) / 10.0
-    return WaterSnapshot(
+    if level is None and "water_level_pct" in decoded:
+        level = decoded["water_level_pct"]
+    snapshot = WaterSnapshot(
         level_pct=int(round(float(level or 0))),
         pump_on=int(decoded.get("pump", 0)),
         raw_state=int(decoded.get("raw", 0)),
         source_addr=source_addr,
+        node_id=_safe_node_id(decoded, "water"),
     )
+    return _sanitize_water_snapshot(snapshot)
 
 
-def build_dashboard_payload(sensor: SensorSnapshot, water: WaterSnapshot) -> Dict[str, Any]:
-    return {
+def build_dashboard_payload(sensor: SensorSnapshot, water: WaterSnapshot, include_meta: bool = True) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
         "hum_a": int(round(sensor.air_humidity_pct)),
         "hum_s": int(round(sensor.soil_humidity_pct)),
         "level": int(water.level_pct),
-        "temp_c": round(sensor.temperature_c, 1),
-        "pump": int(water.pump_on),
-        "sensor_addr": sensor.source_addr,
-        "water_addr": water.source_addr,
     }
+    if include_meta:
+        payload.update(
+            {
+                "temp_c": round(sensor.temperature_c, 1),
+                "pump": int(water.pump_on),
+                "sensor_addr": sensor.source_addr,
+                "water_addr": water.source_addr,
+                "sensor_node": sensor.node_id,
+                "water_node": water.node_id,
+                "ts_unix": int(time.time()),
+            }
+        )
+    return payload
 
 
 def poll_sensor(addr: str) -> SensorSnapshot:
@@ -179,34 +237,71 @@ def poll_water(addr: str) -> WaterSnapshot:
     return decode_water_payload(payload, addr)
 
 
+def build_simulated_sensor(addr: str) -> SensorSnapshot:
+    return SensorSnapshot(
+        temperature_c=24.8,
+        air_humidity_pct=63.0,
+        soil_humidity_pct=71.0,
+        source_addr=addr,
+        node_id="sensor-sim",
+    )
+
+
+def build_simulated_water(addr: str, fallback_level: int) -> WaterSnapshot:
+    return WaterSnapshot(
+        level_pct=clamp_int(fallback_level, 0, 100),
+        pump_on=0,
+        raw_state=0,
+        source_addr=addr,
+        node_id="water-sim",
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bridge Thread CoAP telemetry to the SCADA dashboard CoAP API.")
     parser.add_argument("--dashboard-host", default=os.environ.get("SOILSENSE_SCADA_HOST", "127.0.0.1"))
     parser.add_argument("--dashboard-path", default=os.environ.get("SOILSENSE_SCADA_PATH", "sensores"))
+    parser.add_argument("--dashboard-port", type=int, default=int(os.environ.get("SOILSENSE_SCADA_PORT", str(DEFAULT_DASHBOARD_PORT))))
     parser.add_argument("--sensor-addr", default=_addr_from_env("SOILSENSE_SENSOR_ADDR", "SOILSENSE_SENSOR_RLOC16"))
     parser.add_argument("--water-addr", default=_addr_from_env("SOILSENSE_WATER_ADDR", "SOILSENSE_WATER_RLOC16"))
     parser.add_argument("--level-fallback", type=int, default=int(os.environ.get("SOILSENSE_LEVEL_FALLBACK", "50")))
+    parser.add_argument("--dry-run", action="store_true", help="Build payloads but do not send to the dashboard.")
+    parser.add_argument("--simulate", action="store_true", help="Use simulated sensor values instead of polling Thread nodes.")
+    parser.add_argument("--no-meta", action="store_true", help="Send only the three dashboard-required keys.")
     parser.add_argument("--once", action="store_true")
-    parser.add_argument("--interval", type=int, default=int(os.environ.get("SOILSENSE_SCADA_INTERVAL_S", "5")))
+    parser.add_argument("--interval", type=int, default=int(os.environ.get("SOILSENSE_SCADA_INTERVAL_S", str(DEFAULT_INTERVAL_S))))
     args = parser.parse_args()
 
-    if not args.sensor_addr:
+    if not args.sensor_addr and not args.simulate:
         raise SystemExit("Missing sensor address. Set --sensor-addr or SOILSENSE_SENSOR_ADDR/SOILSENSE_SENSOR_RLOC16.")
 
-    last_water = WaterSnapshot(level_pct=args.level_fallback, pump_on=0, raw_state=0, source_addr="fallback")
+    sensor_addr = args.sensor_addr or "fd00::sensor-sim"
+    water_addr = args.water_addr or "fd00::water-fallback"
+    include_meta = not args.no_meta
+    last_water = WaterSnapshot(level_pct=clamp_int(args.level_fallback, 0, 100), pump_on=0, raw_state=0, source_addr="fallback")
 
     while True:
         try:
-            sensor = poll_sensor(args.sensor_addr)
-            if args.water_addr:
-                try:
-                    last_water = poll_water(args.water_addr)
-                except Exception as exc:
-                    log(f"water node unavailable, using last/fallback level={last_water.level_pct}: {exc}")
+            if args.simulate:
+                sensor = build_simulated_sensor(sensor_addr)
+                last_water = build_simulated_water(water_addr, args.level_fallback)
+            else:
+                sensor = poll_sensor(sensor_addr)
+                if args.water_addr:
+                    try:
+                        last_water = poll_water(water_addr)
+                    except Exception as exc:
+                        log(f"water node unavailable, using last/fallback level={last_water.level_pct}: {exc}")
 
-            payload = build_dashboard_payload(sensor, last_water)
-            coap_post_json(args.dashboard_host, args.dashboard_path, payload)
-            log(f"sent {json.dumps(payload, ensure_ascii=True)} -> coap://{args.dashboard_host}/{args.dashboard_path}")
+            payload = build_dashboard_payload(sensor, last_water, include_meta=include_meta)
+            if args.dry_run:
+                log(f"dry-run payload {json.dumps(payload, ensure_ascii=True)}")
+            else:
+                coap_post_json(args.dashboard_host, args.dashboard_path, payload, port=args.dashboard_port)
+                log(
+                    f"sent {json.dumps(payload, ensure_ascii=True)} "
+                    f"-> coap://{args.dashboard_host}:{args.dashboard_port}/{args.dashboard_path}"
+                )
         except Exception as exc:
             log(f"bridge error: {exc}")
 

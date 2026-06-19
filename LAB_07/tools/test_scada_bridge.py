@@ -74,6 +74,27 @@ def main() -> int:
     assert_true(merged["hum_a"] == 61, "dashboard hum_a should match")
     assert_true(merged["hum_s"] == 73, "dashboard hum_s should match")
     assert_true(merged["level"] == 88, "dashboard level should match")
+    assert_true("temp_c" in merged, "metadata should include temperature")
+    assert_true(merged["sensor_node"] == "nodo1", "sensor node id should propagate")
+    assert_true(merged["water_node"] == "nodo2", "water node id should propagate")
+
+    alt_sensor_payload = encode_cbor_map(
+        {"temp_c": 26, "air_humidity_pct": 104, "soil_humidity_pct": -5, "node": "alt1"}
+    )
+    alt_water_payload = encode_cbor_map(
+        {"water_level_pct": 127, "pump": 2, "raw": 0, "node": "alt2"}
+    )
+
+    alt_sensor = bridge.decode_sensor_payload(alt_sensor_payload, "fd11::10")
+    alt_water = bridge.decode_water_payload(alt_water_payload, "fd11::20")
+    alt_merged = bridge.build_dashboard_payload(alt_sensor, alt_water, include_meta=False)
+
+    assert_true(alt_sensor.temperature_c == 26.0, "alternate temp key should decode")
+    assert_true(alt_sensor.air_humidity_pct == 100.0, "humidity should clamp to 100")
+    assert_true(alt_sensor.soil_humidity_pct == 0.0, "soil humidity should clamp to 0")
+    assert_true(alt_water.level_pct == 100, "water level should clamp to 100")
+    assert_true(alt_water.pump_on == 1, "pump state should normalize to boolean int")
+    assert_true(set(alt_merged.keys()) == {"hum_a", "hum_s", "level"}, "no-meta payload should stay minimal")
 
     print("All bridge checks passed.")
     return 0

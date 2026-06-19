@@ -3,7 +3,7 @@
 
 **Título del trabajo:** Integración de Thread, OTBR, telemetría operacional y puente hacia dashboard con persistencia histórica
 
-**Curso / Entrega:** Laboratorios 7 y 8
+**Curso / Entrega:** Laboratorios 5, 7 y 8
 
 ---
 
@@ -28,6 +28,7 @@ La solución separa claramente las responsabilidades por perfil:
 
 El objetivo de esta fase fue dejar lista la base operativa para:
 
+- sacar la red Thread de su condición de isla mediante OTBR,
 - observar el estado de la red y de los nodos,
 - sacar la telemetría fuera de la malla Thread,
 - integrar el sistema con un dashboard ya existente sin romper su implementación,
@@ -36,6 +37,20 @@ El objetivo de esta fase fue dejar lista la base operativa para:
 ---
 
 # 2. Lab Log & Stakeholder Summaries
+
+## LAB 5 — Border Router e integración de redes
+
+### To Daniela (Customer)
+
+El aporte central de esta fase fue dejar de depender de una observación puramente local dentro de la malla Thread. Con el OTBR sobre Fedora, la red de sensores puede exponer sus nodos hacia la red de acceso y permitir consumo desde otros dispositivos sin cambiar los recursos CoAP de los nodos.
+
+En términos prácticos, esto convierte la malla en una red integrable con otros servicios. El recurso deja de ser útil solo para quien está “dentro” del Thread y pasa a poder ser consultado desde fuera, que es la base necesaria para dashboard, histórico y operación remota.
+
+### To Samuel (Architect)
+
+Lab 5 obligó a fijar el punto de frontera arquitectónica: el OTBR no es un dashboard ni una base de datos, sino el gateway entre la proximity network Thread y la access network IP del host. Esa separación fue clave para que Labs 7 y 8 se pudieran construir sobre una base limpia.
+
+La arquitectura quedó alineada con el patrón enterprise networking de ISO/IEC 30141: nodos Thread en proximidad, OTBR como gateway en el borde, servicios externos fuera de la malla y consumo por aplicaciones en otra capa.
 
 ## LAB 7 — Operación, telemetría y dashboard
 
@@ -81,6 +96,29 @@ Esto tiene implicaciones económicas importantes aunque en esta fase no se hayan
 ---
 
 # 3. Architecture Decision Records (ADRs)
+
+## ADR-005: Usar un OTBR host-side como frontera entre la malla Thread y los consumidores externos
+
+### Context
+
+Los nodos de SoilSense exponen recursos CoAP útiles dentro de Thread, pero el resto del sistema no vive dentro de la red 802.15.4. Sin un Border Router, la malla queda aislada del dashboard, de los servicios de persistencia y de cualquier consumidor fuera del mesh.
+
+### Decision
+
+Se decidió usar un OTBR ejecutándose en Fedora con una mini board ESP32-C6 como RCP dedicado.
+
+### Rationale
+
+- Hace visible la red Thread desde la red del host.
+- Conserva la lógica de aplicación en los nodos y deja el borde como función de gateway.
+- Prepara el camino para telemetría, dashboard e históricos sin reescribir los recursos CoAP.
+- Permite que Lab 7 y Lab 8 se construyan sobre una infraestructura de borde explícita.
+
+### Status
+
+* **Status:** [ ] Proposed | [x] Accepted | [ ] Deprecated
+
+---
 
 ## ADR-007: Separar la telemetría operacional del dashboard mediante un bridge host-side
 
@@ -209,12 +247,19 @@ Se decidió integrar SoilSense con el dashboard existente mediante adaptación e
 
 | Lab | Viewpoint / Lens | Evidence in this project |
 |-----|------------------|--------------------------|
+| Lab 5 | Enterprise system pattern + enterprise networking pattern | OTBR, frontera Thread↔host, validación de dataset/prefix/topología |
 | Lab 7 | Usage + OMD + RAID Interchange | Bridge de telemetría, dashboard target, chequeos de operación |
 | Lab 8 | Business + Construction + Trustworthiness | Separación de perfiles, pruebas automáticas, preparación para endurecimiento |
 
 ---
 
 # 5. First Principles Reflections
+
+## Lab 5
+
+- **El Border Router no cambia el recurso, cambia el alcance.** `/env/temp` y `/nivel` siguen siendo recursos CoAP; lo nuevo es que dejan de quedar encerrados en la malla.
+- **La red no se vuelve accesible por “magia”.** El valor del OTBR está en exponer prefijos, rutas y conectividad entre redes distintas.
+- **La frontera importa arquitectónicamente.** El OTBR pertenece al borde de comunicación, no a la lógica del dashboard ni del nodo sensor.
 
 ## Lab 7
 
@@ -237,6 +282,7 @@ Se decidió integrar SoilSense con el dashboard existente mediante adaptación e
 | Métrica | Objetivo | Estado actual |
 |---------|----------|---------------|
 | Formación de red OTBR | Border Router operativo y accesible por `ot-ctl` | Parcialmente validado |
+| Dataset / prefix OTBR | Dataset activo y prefijos visibles en `netdata` | Implementado, validación final pendiente |
 | Join de nodo FTD | Nodo visible en topología Thread | Validado en sesiones previas |
 | Resolución CoAP local | `GET /sys/health`, `/env/temp`, `/nivel` desde Fedora | Implementado, validación final pendiente |
 | Traducción a JSON | Datos listos para dashboard externo | Implementado |
@@ -378,6 +424,10 @@ El uso de Thread, CoAP, MQTT y una capa de bridge desacoplada facilita incorpora
 
 La elección de tecnologías abiertas protege la inversión y evita dependencia innecesaria de soluciones cerradas.
 
+### Integración de redes
+
+La presencia del OTBR evita que el sistema IoT quede encapsulado en una red local sin salida útil. Desde negocio, esto es importante porque un sistema que no puede integrarse con otros servicios tiene menor valor operativo y menor posibilidad de evolución.
+
 ## 9.7 Riesgos de negocio
 
 | Riesgo | Impacto posible | Estado |
@@ -472,11 +522,12 @@ El sistema está bien encaminado a nivel de arquitectura y software de integraci
 # 13. Conclusiones para la presentación
 
 1. El trabajo no se limitó a “conectar placas”; se diseñó una arquitectura IoT por capas con separación clara entre red restringida, borde y consumo externo.
-2. La decisión más importante fue no romper el dashboard existente, sino integrar la malla Thread hacia él mediante un bridge explícito y mantenible.
-3. El sistema ya tiene base real para observabilidad, persistencia histórica e integración futura con el proyecto final.
-4. Desde el punto de vista económico, el valor principal está en reducir supervisión manual, reutilizar infraestructura existente y proteger la inversión con una arquitectura modular y abierta.
-5. El principal punto abierto no es de diseño sino de estabilización final del OTBR y validación hardware completa.
-6. Desde el punto de vista docente, este trabajo sí responde a los ejes de Lab 7 y Lab 8: OMD, Usage, RAID interchange, Business viewpoint y Construction viewpoint.
+2. Lab 5 quedó incorporado como base estructural: el OTBR define la frontera entre la malla y el resto del sistema.
+3. La decisión más importante fue no romper el dashboard existente, sino integrar la malla Thread hacia él mediante un bridge explícito y mantenible.
+4. El sistema ya tiene base real para observabilidad, persistencia histórica e integración futura con el proyecto final.
+5. Desde el punto de vista económico, el valor principal está en reducir supervisión manual, reutilizar infraestructura existente y proteger la inversión con una arquitectura modular y abierta.
+6. El principal punto abierto no es de diseño sino de estabilización final del OTBR y validación hardware completa.
+7. Desde el punto de vista docente, este trabajo sí responde a los ejes de Lab 5, 7 y 8: enterprise networking pattern, OMD, Usage, RAID interchange, Business viewpoint y Construction viewpoint.
 
 ---
 

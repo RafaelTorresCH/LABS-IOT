@@ -32,6 +32,7 @@ python3 tools/coap_to_influx.py --interval 30
 Use the helper suite to validate the bridge and the Lab 8 hardening rules:
 
 ```bash
+python3 tools/test_lab7_lab8.py lab5
 python3 tools/test_lab7_lab8.py lab8
 python3 tools/test_lab7_lab8.py lab7
 ```
@@ -77,6 +78,37 @@ What it does:
 - builds the JSON expected by `sample_project-main`
 - sends `POST coap://<dashboard-host>/sensores`
 
+Recommended rollout:
+
+1. Simulate payload creation without Thread nodes:
+
+```bash
+python3 tools/thread_to_scada_bridge.py --simulate --dry-run --once
+```
+
+2. Validate real CoAP reads without touching the dashboard:
+
+```bash
+python3 tools/thread_to_scada_bridge.py \
+  --sensor-addr fd11:22:33:44:0:ff:fe00:7001 \
+  --water-addr fd11:22:33:44:0:ff:fe00:7002 \
+  --dry-run --once
+```
+
+3. Send live JSON to the dashboard:
+
+```bash
+set -a
+. tools/scada_bridge.env.example
+set +a
+python3 tools/thread_to_scada_bridge.py \
+  --dashboard-host "$SOILSENSE_SCADA_HOST" \
+  --dashboard-port "$SOILSENSE_SCADA_PORT" \
+  --sensor-addr "$SOILSENSE_SENSOR_ADDR" \
+  --water-addr "$SOILSENSE_WATER_ADDR" \
+  --interval "$SOILSENSE_SCADA_INTERVAL_S"
+```
+
 Dashboard JSON shape:
 
 ```json
@@ -89,6 +121,22 @@ Dashboard JSON shape:
 
 The bridge also adds optional fields such as `temp_c` and `pump`, but the
 sample dashboard safely ignores any extra keys.
+
+Supported sensor payload keys:
+
+- Sensor node:
+  - preferred: `t_x10`, `h_x10`, `soil_x10`
+  - accepted fallback: `temp_c`, `temperature_c`, `air_humidity_pct`, `hum_a`, `soil_humidity_pct`, `hum_s`
+- Water node:
+  - preferred: `level`, `raw`, `pump`
+  - accepted fallback: `level_x10`, `water_level_pct`
+
+Sanitization rules:
+
+- humidity values are clamped to `0..100`
+- level is clamped to `0..100`
+- pump/raw states are normalized to `0` or `1`
+- `--no-meta` sends only `hum_a`, `hum_s`, `level`
 
 Quick unit check:
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Fast checks for Lab 7 and Lab 8.
+"""Fast checks for Lab 5, Lab 7 and Lab 8.
 
 This script is meant to shorten the manual verification loop:
 
+- Lab 5: OTBR state, active dataset, advertised prefix, topology visibility, and
+  optional off-mesh CoAP reachability.
 - Lab 7: Thread topology, FTD attachment, CoAP health readout, bridge payload
   decoding, and Influx line formatting.
 - Lab 8: hardening invariants that can be checked from the repo without the
@@ -10,6 +12,7 @@ This script is meant to shorten the manual verification loop:
 
 Usage:
 
+    python3 tools/test_lab7_lab8.py lab5
     python3 tools/test_lab7_lab8.py lab7
     python3 tools/test_lab7_lab8.py lab8
     python3 tools/test_lab7_lab8.py all
@@ -24,7 +27,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Iterable, List, Sequence
+from typing import Callable, List, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -176,6 +179,48 @@ def test_bridge_unit_checks() -> None:
     assert_true("fd11:22:33:44" in addr and "7000" in addr, "thread address should be derived")
 
 
+def test_lab5_live_checks() -> None:
+    info("live: OTBR operational state")
+    state = bridge.run_otctl("state").strip()
+    assert_true(state in {"leader", "router", "child"}, f"OTBR state unexpected: {state}")
+
+    info("live: active dataset fields")
+    dataset = bridge.run_otctl("dataset", "active")
+    assert_match(dataset, r"Network Name:\s+\S+", "dataset should include network name")
+    assert_match(dataset, r"PAN ID:\s+0x[0-9a-fA-F]{4}", "dataset should include PAN ID")
+    assert_match(dataset, r"Ext PAN ID:\s+[0-9a-fA-F]{16}", "dataset should include Ext PAN ID")
+    assert_match(dataset, r"Network Key:\s+[0-9a-fA-F]{32}", "dataset should include network key")
+
+    info("live: OTBR IPv6 addresses")
+    ipaddr = bridge.run_otctl("ipaddr")
+    assert_match(ipaddr, r"fe80:", "OTBR should have a link-local IPv6")
+    assert_true(
+        any(":" in line and not line.startswith("fe80:") for line in ipaddr.splitlines()),
+        "OTBR should expose at least one non-link-local IPv6 address",
+    )
+
+    info("live: advertised prefix / netdata")
+    try:
+        netdata = bridge.run_otctl("netdata", "show")
+    except subprocess.CalledProcessError as exc:
+        fail(f"ot-ctl netdata show failed: {exc.stderr.strip() if exc.stderr else exc}")
+    assert_match(netdata, r"Prefixes:", "netdata should list prefixes section")
+    assert_match(netdata, r"/64", "netdata should expose at least one /64 prefix")
+
+    info("live: topology visibility")
+    child_table = bridge.run_otctl("child", "table")
+    router_table = bridge.run_otctl("router", "table")
+    assert_true("| ID" in router_table, "router table header should be readable")
+    assert_true("| ID" in child_table, "child table header should be readable")
+
+    manual_sensor_addr = os.environ.get("SOILSENSE_SENSOR_ADDR") or os.environ.get("SOILSENSE_THREAD_NODE_ADDR")
+    if manual_sensor_addr:
+        info("live: optional off-mesh sensor CoAP read")
+        payload = bridge.coap_get(manual_sensor_addr, "env/temp")
+        decoded = bridge.parse_health_payload(payload)
+        assert_true(any(key in decoded for key in ("t_x10", "temp_c", "temperature_c")), "sensor payload should decode")
+
+
 def test_lab7_live_checks() -> None:
     info("live: OTBR state")
     manual_node_addr = os.environ.get("SOILSENSE_THREAD_NODE_ADDR")
@@ -252,9 +297,10 @@ def test_lab8_static_checks() -> None:
 
 
 SUITES: dict[str, List[Callable[[], None]]] = {
+    "lab5": [test_bridge_unit_checks, test_lab5_live_checks],
     "lab7": [test_bridge_unit_checks, test_lab7_live_checks],
     "lab8": [test_bridge_unit_checks, test_lab8_static_checks],
-    "all": [test_bridge_unit_checks, test_lab7_live_checks, test_lab8_static_checks],
+    "all": [test_bridge_unit_checks, test_lab5_live_checks, test_lab7_live_checks, test_lab8_static_checks],
 }
 
 
