@@ -178,12 +178,13 @@ Done
 
 ### Scope
 
-This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keeping the sensor nodes and dashboard logic separate. The current deliverable focuses on:
+This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keeping the firmware roles separated and the dashboard reusable. The current deliverable focuses on:
 
 - a Thread Border Router host on Fedora
 - a mini board acting as the OpenThread RCP
 - a separate ESP32-C6 FTD battery node
-- a host-side CoAP bridge that exports telemetry to InfluxDB
+- a host-side bridge layer for both InfluxDB and the SCADA dashboard
+- a dashboard-facing JSON payload compatible with `sample_project-main/`
 - automated checks for the lab requirements
 
 ### Design decisions
@@ -192,7 +193,9 @@ This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keepi
 - The RCP is flashed to `/dev/ttyACM0` and only serves as radio hardware for the OTBR host.
 - The battery node is flashed to `/dev/ttyACM1` and exposes `GET /sys/health` over CoAP.
 - The battery node reports a small CBOR map with `batt`, `rssi`, `up`, `rloc16`, and `role`. This keeps the payload compact and easy to consume from a bridge.
-- The InfluxDB path is host-side on Fedora. That keeps the mesh simple and makes the bridge reusable for later dashboard work.
+- The sensor and actuator nodes are polled from Fedora over Thread CoAP, not through custom dashboard firmware changes. This keeps `sample_project-main/` intact.
+- The SCADA integration is performed by a host-side adapter that converts CoAP + CBOR telemetry into the JSON that the dashboard already expects on `POST /sensores`.
+- The InfluxDB path stays on the dashboard side for historical storage, so the bridge only needs to deliver valid JSON to the SCADA endpoint.
 - Secrets are kept out of version control through `secrets.h` plus `secrets.h.example`.
 - The repository includes a test helper so you can validate Lab 7 and Lab 8 repeatedly without manually reconstructing each command.
 
@@ -200,32 +203,70 @@ This workspace implements the Lab 7 and Lab 8 backbone for SoilSense while keepi
 
 - `main/`: OpenThread RCP firmware for the mini board.
 - `ftd_battery/`: native OpenThread FTD battery node.
+- `Sensores/`: Thread sensor node exposing `GET /env/temp`.
+- `Nivel_Agua/`: Thread water-level / pump node exposing `GET /nivel`.
 - `ot-br-posix/`: OTBR host stack on Fedora.
 - `tools/coap_to_influx.py`: bridge from Thread CoAP telemetry to InfluxDB line protocol.
+- `tools/thread_to_scada_bridge.py`: bridge from Thread CoAP telemetry to the dashboard CoAP API.
+- `tools/test_scada_bridge.py`: unit checks for the SCADA payload mapping.
 - `tools/test_lab7_lab8.py`: quick verification suite for the lab milestones.
+- `sample_project-main/`: existing dashboard + CoAP receiver + InfluxDB writer kept unchanged.
 
 ### Verification flow
 
 1. Build and flash the mini RCP board from `main/`.
 2. Build and flash the battery node from `ftd_battery/`.
 3. Start `otbr-agent` on Fedora and confirm the Thread topology shows the router and the FTD child/router.
-4. Run the bridge once:
+4. Run the battery bridge once if you want to validate the Lab 7 telemetry path:
 
 ```bash
 python3 tools/coap_to_influx.py --once
 ```
 
-5. Run the automated checks:
+5. Run the dashboard bridge once if you want to validate the SCADA path without changing `sample_project-main/`:
+
+```bash
+python3 tools/thread_to_scada_bridge.py \
+  --dashboard-host <IP_DEL_DEVICE_CON_DASHBOARD> \
+  --sensor-addr <IPv6_SENSOR_THREAD> \
+  --water-addr <IPv6_WATER_THREAD> \
+  --once
+```
+
+This sends a JSON document like:
+
+```json
+{
+  "hum_a": 61,
+  "hum_s": 73,
+  "level": 88
+}
+```
+
+6. Run the automated checks:
 
 ```bash
 python3 tools/test_lab7_lab8.py lab8
 python3 tools/test_lab7_lab8.py lab7
+python3 tools/test_scada_bridge.py
 ```
 
 If the live Lab 7 check needs sudo for `ot-ctl`, run `sudo -v` first in your terminal session.
 
 ### Notes on the sample project
 
-The `sample_project-main/` folder is a separate SCADA-style dashboard example. It is useful as a reference for UI behavior, but it is not the active data path for the current Thread + InfluxDB architecture.
+The `sample_project-main/` folder is the dashboard-side receiver for the current SCADA integration path. It already accepts CoAP `POST /sensores`, updates the web UI in real time, and writes historical data to InfluxDB. For that reason, the integration work in this repository is done outside that folder through `tools/thread_to_scada_bridge.py`, so the dashboard code can stay unchanged.
+
+The dashboard currently expects these JSON keys:
+
+- `hum_a`: air humidity
+- `hum_s`: soil humidity
+- `level`: water level
+
+Those values are generated from Thread CoAP telemetry as follows:
+
+- `GET /env/temp` on the sensor node provides `h_x10` and `soil_x10`
+- `GET /nivel` on the water node provides `level`
+- the host bridge rounds and remaps them into the dashboard JSON
 
 Build each profile from its own directory with its own `idf.py build`.

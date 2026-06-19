@@ -3,386 +3,606 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT SCADA Dashboard</title>
+    <title>Manizales SCADA</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        hw: { bg: '#5b7c99', panel: 'rgba(255,255,255,0.08)', ring: '#ffffff', track: 'rgba(255,255,255,0.15)' },
+                        side: { bg: '#1e293b', card: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.08)' }
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        /* Estilos base y transiciones */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap');
+
         body {
-            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            background-color: #5b7c99; 
             color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Roboto', sans-serif;
             min-height: 100vh;
-            transition: background 0.5s ease;
-        }
-        
-        /* Tema Verde SCADA */
-        body.theme-green {
-            background: linear-gradient(135deg, #1b3a30, #2d5a4c, #75928e);
+            transition: background-color 0.4s ease;
+            overflow-x: hidden;
         }
 
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            border-radius: 1rem;
+        body.theme-green { background-color: #2c5346; }
+
+        /* Tarjetas de Cristal - Estilo Huawei */
+        .glass-panel {
+            background-color: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.3s ease;
         }
 
-        /* Toggle Switch CSS */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #68D391;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #68D391;
-        }
+        /* Jerarquía Tipográfica Mejorada */
+        .title-main { font-size: 1.75rem; font-weight: 400; letter-spacing: 0.02em; }
+        .section-title { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,255,255,0.95); text-transform: uppercase; }
+        .huge-number { font-size: 4rem; font-weight: 300; line-height: 1; letter-spacing: -0.02em; }
+        .gauge-label { font-size: 0.9rem; font-weight: 400; color: rgba(255,255,255,0.7); }
 
-        /* Modal oculto */
-        .modal-hidden {
-            opacity: 0;
-            pointer-events: none;
-            transform: scale(0.95);
+        /* MENÚ LATERAL (SIDEBAR PROFESIONAL) */
+        .sidebar {
+            position: fixed; top: 0; right: 0; width: 380px; height: 100vh;
+            background-color: rgba(15, 23, 42, 0.95); /* Slate 900 con opacidad */
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border-left: 1px solid rgba(255,255,255,0.1);
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 50; display: flex; flex-direction: column;
         }
-        .modal-active {
-            opacity: 1;
-            pointer-events: auto;
-            transform: scale(1);
+        .sidebar.open { transform: translateX(0); }
+        .sidebar-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+            opacity: 0; pointer-events: none; transition: opacity 0.4s ease; z-index: 40;
         }
-        .modal-transition {
-            transition: all 0.3s ease-in-out;
+        .sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+
+        /* Inputs Modernos del Sidebar */
+        .side-input { 
+            background-color: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); 
+            color: white; border-radius: 0.75rem; padding: 0.8rem 1rem; width: 100%; 
+            font-size: 0.95rem; font-weight: 400; transition: all 0.2s; 
         }
-        
-        /* Inputs elegantes */
-        .scada-input {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            border-radius: 0.5rem;
-            padding: 0.5rem 1rem;
-            width: 100%;
-            outline: none;
+        .side-input:focus { border-color: #60a5fa; background-color: rgba(0,0,0,0.5); outline: none; box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15); }
+        .side-input::placeholder { color: rgba(255,255,255,0.3); }
+
+        /* Toggles */
+        .toggle-checkbox:checked { right: 0; border-color: #ffffff; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #ffffff; }
+
+        /* Modales */
+        .modal-overlay { background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); }
+        .modal-hidden { opacity: 0; pointer-events: none; transform: scale(0.96); }
+        .modal-active { opacity: 1; pointer-events: auto; transform: scale(1); }
+        .modal-transition { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* Botones de tiempo */
+        .btn-time {
+            background-color: transparent; border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.7); border-radius: 0.5rem; padding: 0.5rem 1.2rem; 
+            transition: all 0.2s; font-size: 0.85rem; font-weight: 500; letter-spacing: 0.05em;
         }
-        .scada-input:focus {
-            border-color: #68D391;
-        }
+        .btn-time:hover { background-color: rgba(255,255,255,0.1); color: white; }
+        .btn-time.active { background-color: #ffffff; color: #1e293b; border-color: #ffffff; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
     </style>
 </head>
-<body class="p-6">
+<body>
 
-    <div class="max-w-6xl mx-auto space-y-6 relative">
+    <!-- BARRA SUPERIOR MINIMALISTA -->
+    <nav class="w-full px-6 py-5 flex justify-between items-center relative z-30">
+        <div class="flex items-center gap-3">
+            <h1 class="title-main flex items-center gap-2">
+                <i class="fa-solid fa-location-dot text-white/70 text-xl"></i> Manizales
+            </h1>
+        </div>
+        <div class="flex items-center gap-5">
+            <div id="ws-status" class="text-sm font-medium text-white/60 flex items-center bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                <span class="w-2 h-2 rounded-full bg-red-400 mr-2 animate-pulse"></span> Desconectado
+            </div>
+            <button id="btn-toggle-menu" class="text-white/80 hover:text-white transition-colors text-2xl" title="Ajustes">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-2 space-y-8">
         
-        <header class="glass-card p-6 flex justify-between items-center">
-            <div>
-                <h1 class="text-3xl font-bold tracking-wider"><i class="fa-solid fa-microchip mr-2"></i> ESP32 Control Center</h1>
-                <p class="text-gray-300 text-sm mt-1">Supervisión y Control Local</p>
-            </div>
-            <div class="flex items-center space-x-6">
-                <div id="ws-status" class="flex items-center text-red-400 font-semibold">
-                    <i class="fa-solid fa-circle-xmark mr-2"></i> Desconectado
-                </div>
-                <button id="btn-open-settings" class="text-gray-300 hover:text-white transition-colors duration-200">
-                    <i class="fa-solid fa-gear text-2xl"></i>
+        <!-- SECCIÓN 1: NIVELES (GAUGES) -->
+        <div>
+            <div class="flex justify-between items-end mb-4 px-1">
+                <h2 class="section-title mb-0">Niveles de Confort y Planta</h2>
+                <button id="btn-open-history" class="text-sm font-medium text-white/60 hover:text-white flex items-center transition tracking-wider">
+                    MÁS DETALLES <i class="fa-solid fa-chevron-right ml-1 text-xs"></i>
                 </button>
             </div>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="glass-card p-6 flex flex-col items-center justify-center">
-                <i class="fa-solid fa-droplet text-blue-400 text-4xl mb-2"></i>
-                <h2 class="text-lg text-gray-300">Humedad A</h2>
-                <div class="text-4xl font-bold mt-2"><span id="val-hum-a">--</span>%</div>
-            </div>
-            <div class="glass-card p-6 flex flex-col items-center justify-center">
-                <i class="fa-solid fa-seedling text-green-400 text-4xl mb-2"></i>
-                <h2 class="text-lg text-gray-300">Humedad S</h2>
-                <div class="text-4xl font-bold mt-2"><span id="val-hum-s">--</span>%</div>
-            </div>
-            <div class="glass-card p-6 flex flex-col items-center justify-center">
-                <i class="fa-solid fa-water text-cyan-400 text-4xl mb-2"></i>
-                <h2 class="text-lg text-gray-300">Nivel de Agua</h2>
-                <div class="text-4xl font-bold mt-2"><span id="val-level">--</span>%</div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="glass-card p-6 flex flex-col items-center justify-between lg:col-span-1">
-                <h2 class="text-xl font-bold w-full text-center border-b border-gray-600 pb-2 mb-4"><i class="fa-solid fa-gears mr-2"></i> Control de Válvula</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-white/5 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
                 
-                <div class="flex flex-col items-center mb-6 w-full">
-                    <span class="text-gray-300 mb-2" id="mode-text">Modo: Manual</span>
-                    <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                        <input type="checkbox" name="toggle" id="mode-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
-                        <label for="mode-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-500 cursor-pointer transition-colors duration-200 ease-in-out"></label>
+                <!-- Humedad A -->
+                <div class="glass-panel border-t-0 flex flex-col items-center justify-center py-10">
+                    <p class="gauge-label mb-5 uppercase tracking-widest">Humedad Ambiente</p>
+                    <div class="relative w-44 h-44">
+                        <svg class="w-full h-full" viewBox="0 0 100 100">
+                            <circle class="text-hw-track stroke-current" stroke-width="5" cx="50" cy="50" r="44" fill="transparent"></circle>
+                            <circle id="ring-hum-a" class="text-hw-ring stroke-current transition-all duration-700 ease-out" stroke-width="5" stroke-linecap="round" cx="50" cy="50" r="44" fill="transparent" stroke-dasharray="276" stroke-dashoffset="276" transform="rotate(-90 50 50)"></circle>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <div class="flex items-baseline">
+                                <span class="huge-number" id="val-hum-a">0</span>
+                                <span class="text-2xl font-light ml-1 text-white/70">%</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <button id="btn-valve" class="w-full py-4 rounded-lg font-bold text-lg transition-all duration-300 bg-red-600 hover:bg-red-500 text-white shadow-lg">
-                    <i class="fa-solid fa-power-off mr-2"></i> <span id="valve-btn-text">Abrir Válvula</span>
-                </button>
-                <p id="valve-status" class="mt-4 text-sm font-semibold text-red-400">Estado: CERRADA</p>
-            </div>
+                <!-- Humedad S -->
+                <div class="glass-panel border-t-0 flex flex-col items-center justify-center py-10">
+                    <p class="gauge-label mb-5 uppercase tracking-widest">Humedad Suelo</p>
+                    <div class="relative w-44 h-44">
+                        <svg class="w-full h-full" viewBox="0 0 100 100">
+                            <circle class="text-hw-track stroke-current" stroke-width="5" cx="50" cy="50" r="44" fill="transparent"></circle>
+                            <circle id="ring-hum-s" class="text-hw-ring stroke-current transition-all duration-700 ease-out" stroke-width="5" stroke-linecap="round" cx="50" cy="50" r="44" fill="transparent" stroke-dasharray="276" stroke-dashoffset="276" transform="rotate(-90 50 50)"></circle>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <div class="flex items-baseline">
+                                <span class="huge-number" id="val-hum-s">0</span>
+                                <span class="text-2xl font-light ml-1 text-white/70">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="glass-card p-6 lg:col-span-2">
-                <canvas id="realtimeChart" height="100"></canvas>
+                <!-- Nivel Agua -->
+                <div class="glass-panel border-t-0 flex flex-col items-center justify-center py-10">
+                    <p class="gauge-label mb-5 uppercase tracking-widest">Nivel del Tanque</p>
+                    <div class="relative w-44 h-44">
+                        <svg class="w-full h-full" viewBox="0 0 100 100">
+                            <circle class="text-hw-track stroke-current" stroke-width="5" cx="50" cy="50" r="44" fill="transparent"></circle>
+                            <circle id="ring-level" class="text-hw-ring stroke-current transition-all duration-700 ease-out" stroke-width="5" stroke-linecap="round" cx="50" cy="50" r="44" fill="transparent" stroke-dasharray="276" stroke-dashoffset="276" transform="rotate(-90 50 50)"></circle>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <div class="flex items-baseline">
+                                <span class="huge-number" id="val-level">0</span>
+                                <span class="text-2xl font-light ml-1 text-white/70">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
-    </div>
 
-    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 modal-hidden modal-transition">
-        <div class="glass-card w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-center border-b border-gray-600 pb-4 mb-6">
-                <h2 class="text-2xl font-bold"><i class="fa-solid fa-sliders mr-2"></i> Configuraciones del Sistema</h2>
-                <button id="btn-close-settings" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        <!-- SECCIÓN 2: CONTROL Y TENDENCIAS -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-[1px] bg-white/5 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+            
+            <!-- Actuador Válvula (Ocupa 2 columnas) -->
+            <div class="glass-panel border-t-0 lg:col-span-2 flex flex-col justify-between p-8">
+                <div>
+                    <h2 class="section-title mb-6">Actuador Principal</h2>
+                    
+                    <div class="flex items-center justify-between bg-black/10 border border-white/5 p-5 rounded-xl mb-8">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-microchip text-2xl text-white/50"></i>
+                            <div>
+                                <p class="font-medium text-lg tracking-wide" id="mode-text">Modo Manual</p>
+                                <p class="text-sm text-white/50">Regulación del sistema</p>
+                            </div>
+                        </div>
+                        <div class="relative inline-block w-14 align-middle select-none">
+                            <input type="checkbox" id="mode-toggle" class="toggle-checkbox absolute block w-7 h-7 rounded-full bg-gray-400 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                            <label for="mode-toggle" class="toggle-label block overflow-hidden h-7 rounded-full bg-white/20 cursor-pointer transition-colors duration-200 ease-in-out"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-end mb-3 px-2">
+                        <span class="text-sm font-medium text-white/60 uppercase tracking-widest">Estado Físico</span>
+                        <span id="valve-status" class="text-xl font-bold text-white tracking-wide">CERRADA</span>
+                    </div>
+                    <button id="btn-valve" class="w-full bg-white/10 hover:bg-white/20 border border-white/20 py-4 rounded-xl transition-all font-bold tracking-widest text-sm shadow-lg">
+                        ABRIR VÁLVULA
+                    </button>
+                </div>
             </div>
 
-            <div class="space-y-6">
-                <div>
-                    <h3 class="text-lg font-semibold text-cyan-300 mb-3"><i class="fa-solid fa-palette mr-2"></i> Interfaz</h3>
-                    <div class="flex items-center justify-between bg-black bg-opacity-20 p-4 rounded-lg">
-                        <span>Habilitar Tema Verde</span>
-                        <div class="relative inline-block w-12 align-middle select-none">
-                            <input type="checkbox" id="theme-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200"/>
-                            <label for="theme-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-500 cursor-pointer transition-colors duration-200"></label>
-                        </div>
+            <!-- Gráfica Tiempo Real (Ocupa 3 columnas) -->
+            <div class="glass-panel border-t-0 lg:col-span-3 p-8 flex flex-col">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="section-title mb-0">Tendencia en Vivo</h2>
+                    <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded text-xs font-bold tracking-widest flex items-center">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2 animate-ping"></span> ONLINE
+                    </span>
+                </div>
+                <div class="flex-grow w-full relative h-48">
+                    <!-- Se le quitó el límite de 100 fijo en la config para que no se corte en 119 -->
+                    <canvas id="realtimeChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- OVERLAY Y SIDEBAR PROFESIONAL -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    <aside id="sidebar" class="sidebar">
+        
+        <!-- Header Sidebar -->
+        <div class="px-8 py-6 flex justify-between items-center border-b border-white/10">
+            <div>
+                <h2 class="text-xl font-medium text-white tracking-wide">Ajustes del Sistema</h2>
+                <p class="text-xs text-white/50 mt-1">Configuración SCADA & API</p>
+            </div>
+            <button id="btn-close-menu" class="text-white/40 hover:text-white transition-colors text-2xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Contenido Sidebar -->
+        <div class="flex-grow overflow-y-auto px-8 py-6 space-y-8">
+            
+            <!-- Banners de Estado -->
+            <div id="link-success-banner" class="hidden bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl text-sm text-blue-200 flex gap-3 items-start">
+                <i class="fa-solid fa-link mt-1 text-lg"></i>
+                <p>Enlace copiado. Compártelo para sincronizar en otro equipo.</p>
+            </div>
+            <div id="cred-status-banner" class="hidden bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl text-sm text-emerald-200 flex gap-3 items-start">
+                <i class="fa-solid fa-microchip mt-1 text-lg"></i>
+                <p>La placa ESP32 ya tiene credenciales NVS activas y operando.</p>
+            </div>
+
+            <!-- Interfaz -->
+            <div class="bg-side-card border border-side-border p-5 rounded-xl">
+                <h3 class="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Interfaz Gráfica</h3>
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-white/80">Habilitar Tema Verde</span>
+                    <div class="relative inline-block w-12 align-middle select-none">
+                        <input type="checkbox" id="theme-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-gray-500 border-4 appearance-none cursor-pointer transition-transform duration-200"/>
+                        <label for="theme-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer transition-colors duration-200"></label>
                     </div>
                 </div>
+            </div>
 
-                <div>
-                    <h3 class="text-lg font-semibold text-blue-300 mb-3"><i class="fa-brands fa-telegram mr-2"></i> API Telegram</h3>
-                    <div class="grid grid-cols-1 gap-4 bg-black bg-opacity-20 p-4 rounded-lg">
-                        <div>
-                            <label class="block text-sm text-gray-300 mb-1">Bot Token</label>
-                            <input type="text" id="tg-token" class="scada-input" placeholder="Ej: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-300 mb-1">Chat ID</label>
-                            <input type="text" id="tg-chatid" class="scada-input" placeholder="Ej: 123456789">
-                        </div>
+            <!-- Telegram -->
+            <div class="bg-side-card border border-side-border p-5 rounded-xl">
+                <h3 class="text-xs font-bold text-white/40 uppercase tracking-widest mb-4"><i class="fa-brands fa-telegram mr-2"></i> Telegram API</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">Bot Token</label>
+                        <input type="text" id="tg-token" class="side-input" placeholder="Ej: 123456:ABC-DEF1234...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">Chat ID</label>
+                        <input type="text" id="tg-chatid" class="side-input" placeholder="Destino de alertas">
                     </div>
                 </div>
+            </div>
 
-                <div>
-                    <h3 class="text-lg font-semibold text-purple-300 mb-3"><i class="fa-solid fa-database mr-2"></i> Base de Datos InfluxDB</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black bg-opacity-20 p-4 rounded-lg">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm text-gray-300 mb-1">Servidor URL</label>
-                            <input type="text" id="db-url" class="scada-input" placeholder="http://192.168.x.x:8086">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-300 mb-1">Organización</label>
-                            <input type="text" id="db-org" class="scada-input" placeholder="Mi_Org">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-300 mb-1">Bucket</label>
-                            <input type="text" id="db-bucket" class="scada-input" placeholder="SCADA_Data">
-                        </div>
-                        <div class="md:col-span-2">
-                            <label class="block text-sm text-gray-300 mb-1">Token de Acceso</label>
-                            <input type="password" id="db-token" class="scada-input" placeholder="Pegue su token aquí">
-                        </div>
+            <!-- InfluxDB -->
+            <div class="bg-side-card border border-side-border p-5 rounded-xl">
+                <h3 class="text-xs font-bold text-white/40 uppercase tracking-widest mb-4"><i class="fa-solid fa-database mr-2"></i> InfluxDB Cloud</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">URL Endpoint</label>
+                        <input type="text" id="db-url" class="side-input" placeholder="https://us-east-1-1.aws...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">Organization ID</label>
+                        <input type="text" id="db-org" class="side-input" placeholder="ID Alfanumérico">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">Bucket Name</label>
+                        <input type="text" id="db-bucket" class="side-input" placeholder="SCADA_Data">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-white/60 mb-1.5 ml-1">API Token</label>
+                        <input type="password" id="db-token" class="side-input" placeholder="Token de escritura/lectura">
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="mt-8 pt-4 border-t border-gray-600 flex justify-end">
-                    <button id="btn-save-settings" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                        <i class="fa-solid fa-floppy-disk mr-2"></i> Guardar en ESP32
-                    </button>
+        <!-- Footer Sidebar -->
+        <div class="p-6 bg-black/20 border-t border-white/10 flex flex-col gap-3 shrink-0">
+            <button id="btn-share-link" class="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 transition-colors rounded-xl text-sm font-medium text-white tracking-wide">
+                <i class="fa-solid fa-share-nodes mr-2"></i> COMPARTIR ACCESO
+            </button>
+            <button id="btn-save-settings" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 transition-colors rounded-xl text-sm font-bold text-white tracking-wide shadow-[0_0_20px_rgba(37,99,235,0.3)]">
+                GUARDAR EN ESP32
+            </button>
+        </div>
+    </aside>
+
+    <!-- MODAL DE HISTÓRICOS -->
+    <div id="history-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay modal-hidden modal-transition p-4">
+        <div class="bg-hw-bg w-full max-w-5xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
+            <div class="p-8 border-b border-white/10 flex justify-between items-center bg-black/5">
+                <div>
+                    <h2 class="text-xl font-bold text-white tracking-wide uppercase">Histórico de Base de Datos</h2>
+                    <p class="text-sm text-white/60 mt-1">Consulta directa a InfluxDB</p>
+                </div>
+                <button id="btn-close-history" class="text-white/50 hover:text-white bg-white/5 hover:bg-white/10 w-10 h-10 rounded-full transition flex items-center justify-center text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-8">
+                <div class="flex flex-wrap gap-3 mb-8">
+                    <button class="btn-time active" onclick="loadHistory('-1h', '1m', this)">1 HORA</button>
+                    <button class="btn-time" onclick="loadHistory('-24h', '15m', this)">24 HORAS</button>
+                    <button class="btn-time" onclick="loadHistory('-7d', '1h', this)">7 DÍAS</button>
+                    <button class="btn-time" onclick="loadHistory('-30d', '12h', this)">1 MES</button>
+                </div>
+                <div class="w-full h-80 bg-black/10 rounded-xl p-4 border border-white/5">
+                    <canvas id="historyChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // --- VARIABLES GLOBALES ---
-        let gateway = `ws://${window.location.hostname}/ws`;
-        let websocket;
-        let currentMode = "manual"; 
-        let valveState = 0; 
-
-        // --- CONFIGURACIÓN DE CHART.JS ---
-        const ctx = document.getElementById('realtimeChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'Nivel Agua (%)', borderColor: '#22d3ee', backgroundColor: 'rgba(34, 211, 238, 0.1)', data: [], tension: 0.4, fill: true },
-                    { label: 'Hum A (%)', borderColor: '#60a5fa', borderDash: [5, 5], data: [], tension: 0.4 },
-                    { label: 'Hum S (%)', borderColor: '#4ade80', borderDash: [5, 5], data: [], tension: 0.4 }
-                ]
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                scales: {
-                    x: { ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                    y: { min: 0, max: 100, ticks: { color: '#ccc' }, grid: { color: 'rgba(255,255,255,0.1)' } }
-                },
-                plugins: { legend: { labels: { color: '#fff' } } }
+        // --- LÓGICA DE SINCRONIZACIÓN MÁGICA ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('cfg')) {
+                try {
+                    const decoded = JSON.parse(atob(params.get('cfg')));
+                    if(decoded.u) localStorage.setItem('db_url', decoded.u);
+                    if(decoded.o) localStorage.setItem('db_org', decoded.o);
+                    if(decoded.b) localStorage.setItem('db_bucket', decoded.b);
+                    if(decoded.t) localStorage.setItem('db_token', decoded.t);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    setTimeout(() => alert("Ajustes sincronizados con éxito en este dispositivo."), 500);
+                } catch(e) { console.error("Link inválido."); }
             }
         });
 
-        // --- INICIALIZACIÓN ---
-        window.addEventListener('load', onLoad);
+        // --- VARIABLES GLOBALES ---
+        let gateway = `ws://${window.location.hostname}/ws`;
+        let websocket;
+        let currentMode = "manual", valveState = 0; 
 
-        function onLoad(event) {
-            initWebSocket();
-            initControlListeners();
-            initModalListeners();
+        document.getElementById('db-url').value = localStorage.getItem('db_url') || '';
+        document.getElementById('db-org').value = localStorage.getItem('db_org') || '';
+        document.getElementById('db-bucket').value = localStorage.getItem('db_bucket') || '';
+        document.getElementById('db-token').value = localStorage.getItem('db_token') || '';
+
+        // --- MANEJO DEL MENÚ LATERAL (SIDEBAR) ---
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        function toggleMenu() { sidebar.classList.toggle('open'); overlay.classList.toggle('open'); }
+        document.getElementById('btn-toggle-menu').addEventListener('click', toggleMenu);
+        document.getElementById('btn-close-menu').addEventListener('click', toggleMenu);
+        overlay.addEventListener('click', toggleMenu);
+
+        // Tema
+        document.getElementById('theme-toggle').addEventListener('change', (e) => {
+            if(e.target.checked) document.body.classList.add('theme-green');
+            else document.body.classList.remove('theme-green');
+        });
+
+        // --- CONFIGURACIÓN GLOBAL CHART.JS ---
+        Chart.defaults.color = 'rgba(255,255,255,0.7)';
+        Chart.defaults.font.family = "'Roboto', sans-serif";
+        Chart.defaults.scale.grid.color = 'rgba(255,255,255,0.05)';
+
+        // GRÁFICA EN VIVO (Solución de corte en valores > 100)
+        const ctxRT = document.getElementById('realtimeChart').getContext('2d');
+        const rtChart = new Chart(ctxRT, {
+            type: 'line',
+            data: { labels: [], datasets: [
+                { label: 'Nivel (%)', borderColor: '#ffffff', backgroundColor: 'rgba(255,255,255,0.1)', data: [], tension: 0.4, fill: true, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 6 },
+                { label: 'Hum A', borderColor: 'rgba(255,255,255,0.5)', borderDash: [5, 5], data: [], tension: 0.4, borderWidth: 1.5, pointRadius: 0 },
+                { label: 'Hum S', borderColor: 'rgba(255,255,255,0.3)', borderDash: [2, 4], data: [], tension: 0.4, borderWidth: 1.5, pointRadius: 0 }
+            ]},
+            options: { 
+                responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false }, 
+                scales: { 
+                    x: { display: false }, 
+                    y: { suggestedMin: 0, suggestedMax: 100, border: {display: false} } // Aquí está la magia que soluciona tu problema de 119%
+                }, 
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleFont: {size: 13}, bodyFont: {size: 13, weight: 'bold'}, padding: 12, cornerRadius: 8 } } 
+            }
+        });
+
+        // GRÁFICA HISTÓRICA
+        const ctxHist = document.getElementById('historyChart').getContext('2d');
+        const histChart = new Chart(ctxHist, {
+            type: 'line',
+            data: { labels: [], datasets: [
+                { label: 'Nivel Histórico', borderColor: '#ffffff', backgroundColor: 'rgba(255,255,255,0.15)', data: [], tension: 0.3, fill: true, borderWidth: 2, pointRadius: 0 },
+                { label: 'Hum A', borderColor: '#60a5fa', data: [], tension: 0.3, borderWidth: 2, pointRadius: 0 },
+                { label: 'Hum S', borderColor: '#34d399', data: [], tension: 0.3, borderWidth: 2, pointRadius: 0 }
+            ]},
+            options: { 
+                responsive: true, maintainAspectRatio: false, animation: {duration: 600}, interaction: { mode: 'index', intersect: false }, 
+                scales: { 
+                    x: { ticks: { maxTicksLimit: 12 } }, 
+                    y: { suggestedMin: 0, suggestedMax: 100, border: {display: false} } 
+                }, 
+                plugins: { legend: { position: 'top', labels: {usePointStyle: true, boxWidth: 6, font:{size:13}} }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)' } } 
+            }
+        });
+
+        // --- ACTUALIZACIÓN DE MEDIDORES CIRCULARES (GAUGES SVG) ---
+        // Circunferencia de radio 44 = 2 * pi * 44 = 276.46
+        function updateGauge(id, value) {
+            const circle = document.getElementById(`ring-${id}`);
+            const text = document.getElementById(`val-${id}`);
+            if (circle && text && value !== undefined) {
+                text.innerText = value;
+                // Si el valor se pasa de 100, el anillo se llena al 100% visualmente
+                let safeVal = value > 100 ? 100 : (value < 0 ? 0 : value);
+                const offset = 276 - (safeVal / 100) * 276;
+                circle.style.strokeDashoffset = offset;
+            }
         }
 
-        // --- LÓGICA DE WEBSOCKETS ---
+        // --- INICIALIZACIÓN Y WEBSOCKETS ---
+        window.addEventListener('load', () => { initWebSocket(); initControlListeners(); initModalListeners(); });
+
         function initWebSocket() {
             websocket = new WebSocket(gateway);
-            websocket.onopen = onOpen;
-            websocket.onclose = onClose;
-            websocket.onmessage = onMessage;
-        }
-
-        function onOpen(event) {
-            const statusEl = document.getElementById('ws-status');
-            statusEl.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Conectado';
-            statusEl.className = 'flex items-center text-green-400 font-semibold';
-        }
-
-        function onClose(event) {
-            const statusEl = document.getElementById('ws-status');
-            statusEl.innerHTML = '<i class="fa-solid fa-circle-xmark mr-2"></i> Desconectado';
-            statusEl.className = 'flex items-center text-red-400 font-semibold';
-            setTimeout(initWebSocket, 2000);
-        }
-
-        function onMessage(event) {
-            const data = JSON.parse(event.data);
-            
-            if(data.hum_a !== undefined) document.getElementById('val-hum-a').innerText = data.hum_a;
-            if(data.hum_s !== undefined) document.getElementById('val-hum-s').innerText = data.hum_s;
-            if(data.level !== undefined) document.getElementById('val-level').innerText = data.level;
-
-            if(data.mode !== undefined && data.valve !== undefined) syncControls(data.mode, data.valve);
-            if(data.level !== undefined) updateChart(data.level, data.hum_a, data.hum_s);
-        }
-
-        // --- FUNCIONES DE CONTROL PRINCIPAL ---
-        function initControlListeners() {
-            const toggle = document.getElementById('mode-toggle');
-            const btn = document.getElementById('btn-valve');
-
-            toggle.addEventListener('change', (e) => {
-                const newMode = e.target.checked ? "auto" : "manual";
-                sendCmd({ mode: newMode });
-            });
-
-            btn.addEventListener('click', () => {
-                if(currentMode === "manual") {
-                    const newValveState = valveState === 0 ? 1 : 0;
-                    sendCmd({ valve: newValveState });
+            websocket.onopen = () => { document.getElementById('ws-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-green-400 mr-2"></span> Conectado'; };
+            websocket.onclose = () => { document.getElementById('ws-status').innerHTML = '<span class="w-2 h-2 rounded-full bg-red-400 mr-2 animate-pulse"></span> Desconectado'; setTimeout(initWebSocket, 2000); };
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if(data.hum_a !== undefined) updateGauge('hum-a', data.hum_a);
+                if(data.hum_s !== undefined) updateGauge('hum-s', data.hum_s);
+                if(data.level !== undefined) {
+                    updateGauge('level', data.level);
+                    updateRTChart(data.level, data.hum_a, data.hum_s);
                 }
-            });
+                if(data.mode !== undefined) syncControls(data.mode, data.valve);
+                
+                if(data.has_tg !== undefined || data.has_db !== undefined) {
+                    const banner = document.getElementById('cred-status-banner');
+                    if(data.has_tg === true || data.has_db === true) banner.classList.remove('hidden');
+                    else banner.classList.add('hidden');
+                }
+            };
+        }
+
+        function initControlListeners() {
+            document.getElementById('mode-toggle').addEventListener('change', (e) => websocket.send(JSON.stringify({ mode: e.target.checked ? "auto" : "manual" })));
+            document.getElementById('btn-valve').addEventListener('click', () => { if(currentMode === "manual") websocket.send(JSON.stringify({ valve: valveState === 0 ? 1 : 0 })); });
         }
 
         function syncControls(mode, valve) {
-            currentMode = mode;
-            valveState = valve;
-            const toggle = document.getElementById('mode-toggle');
-            const modeText = document.getElementById('mode-text');
-            const btn = document.getElementById('btn-valve');
-            const statusText = document.getElementById('valve-status');
-
+            currentMode = mode; valveState = valve;
+            const btn = document.getElementById('btn-valve'), stText = document.getElementById('valve-status'), modeText = document.getElementById('mode-text');
+            document.getElementById('mode-toggle').checked = (mode === "auto");
+            modeText.innerText = mode === "auto" ? "Modo Automático" : "Modo Manual";
+            btn.disabled = (mode === "auto");
+            
             if (mode === "auto") {
-                toggle.checked = true;
-                modeText.innerText = "Modo: Automático";
-                btn.disabled = true;
-                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.className = "w-full py-4 rounded-xl font-bold tracking-widest text-sm transition-all bg-white/5 text-white/30 border border-white/5 cursor-not-allowed";
+                btn.innerHTML = 'CONTROL BLOQUEADO';
             } else {
-                toggle.checked = false;
-                modeText.innerText = "Modo: Manual";
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-
-            if (valve === 1) {
-                btn.innerHTML = '<i class="fa-solid fa-power-off mr-2"></i> Cerrar Válvula';
-                btn.className = btn.className.replace('bg-red-600 hover:bg-red-500', 'bg-green-600 hover:bg-green-500');
-                statusText.innerText = "Estado: ABIERTA";
-                statusText.className = "mt-4 text-sm font-semibold text-green-400";
-            } else {
-                btn.innerHTML = '<i class="fa-solid fa-power-off mr-2"></i> Abrir Válvula';
-                btn.className = btn.className.replace('bg-green-600 hover:bg-green-500', 'bg-red-600 hover:bg-red-500');
-                statusText.innerText = "Estado: CERRADA";
-                statusText.className = "mt-4 text-sm font-semibold text-red-400";
-            }
-        }
-
-        // --- LÓGICA DEL MODAL Y CONFIGURACIONES ---
-        function initModalListeners() {
-            const modal = document.getElementById('settings-modal');
-            const btnOpen = document.getElementById('btn-open-settings');
-            const btnClose = document.getElementById('btn-close-settings');
-            const btnSave = document.getElementById('btn-save-settings');
-            const themeToggle = document.getElementById('theme-toggle');
-
-            // Abrir / Cerrar Modal
-            btnOpen.addEventListener('click', () => modal.classList.replace('modal-hidden', 'modal-active'));
-            btnClose.addEventListener('click', () => modal.classList.replace('modal-active', 'modal-hidden'));
-
-            // Cambiar Color de Tema en tiempo real
-            themeToggle.addEventListener('change', (e) => {
-                if(e.target.checked) {
-                    document.body.classList.add('theme-green');
+                if (valve === 1) {
+                    btn.className = "w-full py-4 rounded-xl font-bold tracking-widest text-sm transition-all bg-white text-hw-bg hover:bg-gray-100 shadow-[0_0_20px_rgba(255,255,255,0.4)]";
+                    btn.innerHTML = 'CERRAR VÁLVULA';
                 } else {
-                    document.body.classList.remove('theme-green');
+                    btn.className = "w-full py-4 rounded-xl font-bold tracking-widest text-sm transition-all bg-white/10 hover:bg-white/20 border border-white/20 text-white shadow-lg";
+                    btn.innerHTML = 'ABRIR VÁLVULA';
                 }
+            }
+            stText.innerText = valve === 1 ? "ABIERTA" : "CERRADA"; 
+            stText.className = valve === 1 ? "text-xl font-bold text-white tracking-wide" : "text-xl font-medium text-white/50 tracking-wide";
+        }
+
+        function updateRTChart(level, humA, humS) {
+            const now = new Date(); const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            if (rtChart.data.labels.length > 25) { rtChart.data.labels.shift(); rtChart.data.datasets.forEach(d => d.data.shift()); }
+            rtChart.data.labels.push(timeStr); rtChart.data.datasets[0].data.push(level); rtChart.data.datasets[1].data.push(humA); rtChart.data.datasets[2].data.push(humS); rtChart.update();
+        }
+
+        // --- LÓGICA DE COMPARTIR Y GUARDAR ---
+        function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(showShareSuccess);
+            } else {
+                let textArea = document.createElement("textarea"); textArea.value = text;
+                textArea.style.position = "fixed"; textArea.style.left = "-999999px";
+                document.body.appendChild(textArea); textArea.focus(); textArea.select();
+                try { document.execCommand('copy'); showShareSuccess(); } catch (err) { alert("Copia manualmente:\n" + text); }
+                textArea.remove();
+            }
+        }
+        function showShareSuccess() {
+            const banner = document.getElementById('link-success-banner'); banner.classList.remove('hidden');
+            setTimeout(() => banner.classList.add('hidden'), 5000);
+        }
+
+        function initModalListeners() {
+            const mHist = document.getElementById('history-modal');
+            document.getElementById('btn-open-history').addEventListener('click', () => { mHist.classList.replace('modal-hidden', 'modal-active'); loadHistory('-1h', '1m', document.querySelector('.btn-time.active')); });
+            document.getElementById('btn-close-history').addEventListener('click', () => mHist.classList.replace('modal-active', 'modal-hidden'));
+
+            document.getElementById('btn-share-link').addEventListener('click', () => {
+                const configToShare = { u: document.getElementById('db-url').value, o: document.getElementById('db-org').value, b: document.getElementById('db-bucket').value, t: document.getElementById('db-token').value };
+                if(!configToShare.u || !configToShare.t) { alert("Llena los datos primero."); return; }
+                const shareableLink = `http://${window.location.hostname}/?cfg=${btoa(JSON.stringify(configToShare))}`;
+                copyToClipboard(shareableLink);
             });
 
-            // Enviar credenciales a la ESP32
-            btnSave.addEventListener('click', () => {
-                const configPayload = {
-                    config_update: true,
-                    tg_token: document.getElementById('tg-token').value,
-                    tg_chat: document.getElementById('tg-chatid').value,
-                    db_url: document.getElementById('db-url').value,
-                    db_org: document.getElementById('db-org').value,
-                    db_bucket: document.getElementById('db-bucket').value,
-                    db_token: document.getElementById('db-token').value
+            document.getElementById('btn-save-settings').addEventListener('click', () => {
+                const cfg = {
+                    config_update: true, tg_token: document.getElementById('tg-token').value, tg_chat: document.getElementById('tg-chatid').value,
+                    db_url: document.getElementById('db-url').value, db_org: document.getElementById('db-org').value, db_bucket: document.getElementById('db-bucket').value, db_token: document.getElementById('db-token').value
                 };
-                
-                sendCmd(configPayload);
-                
-                // Efecto visual de guardado exitoso
-                btnSave.innerHTML = '<i class="fa-solid fa-check mr-2"></i> Guardado';
-                btnSave.classList.replace('bg-blue-600', 'bg-green-600');
-                
-                setTimeout(() => {
-                    modal.classList.replace('modal-active', 'modal-hidden');
-                    btnSave.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i> Guardar en ESP32';
-                    btnSave.classList.replace('bg-green-600', 'bg-blue-600');
-                }, 1000);
+                localStorage.setItem('db_url', cfg.db_url); localStorage.setItem('db_org', cfg.db_org); localStorage.setItem('db_bucket', cfg.db_bucket); localStorage.setItem('db_token', cfg.db_token);
+                websocket.send(JSON.stringify(cfg)); 
+                const btn = document.getElementById('btn-save-settings'); const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> GUARDADO'; 
+                btn.classList.replace('from-blue-600', 'from-emerald-600'); btn.classList.replace('to-blue-500', 'to-emerald-500'); btn.classList.replace('shadow-[0_0_20px_rgba(37,99,235,0.3)]', 'shadow-[0_0_20px_rgba(16,185,129,0.3)]');
+                setTimeout(() => { toggleMenu(); btn.innerHTML = originalHtml; btn.classList.replace('from-emerald-600', 'from-blue-600'); btn.classList.replace('to-emerald-500', 'to-blue-500'); btn.classList.replace('shadow-[0_0_20px_rgba(16,185,129,0.3)]', 'shadow-[0_0_20px_rgba(37,99,235,0.3)]'); }, 1200);
             });
         }
 
-        function sendCmd(obj) {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify(obj));
-            }
-        }
+        // --- SOLUCIÓN DE INFLUXDB (Missing Level Fix) ---
+        async function loadHistory(rangeStart, aggregate, btnElement) {
+            document.querySelectorAll('.btn-time').forEach(b => b.classList.remove('active')); btnElement.classList.add('active');
+            const url = localStorage.getItem('db_url'), org = localStorage.getItem('db_org'), bucket = localStorage.getItem('db_bucket'), token = localStorage.getItem('db_token');
+            if (!url || !token) { alert("Guarda tus parámetros en el menú lateral primero."); return; }
 
-        function updateChart(level, humA, humS) {
-            const now = new Date();
-            const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-            if (chart.data.labels.length > 20) {
-                chart.data.labels.shift();
-                chart.data.datasets.forEach(dataset => dataset.data.shift());
-            }
-            chart.data.labels.push(timeStr);
-            chart.data.datasets[0].data.push(level);
-            chart.data.datasets[1].data.push(humA);
-            chart.data.datasets[2].data.push(humS);
-            chart.update();
+            const query = `from(bucket: "${bucket}") |> range(start: ${rangeStart}) |> filter(fn: (r) => r["_measurement"] == "telemetria") |> aggregateWindow(every: ${aggregate}, fn: mean, createEmpty: false) |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")`;
+
+            try {
+                const res = await fetch(`${url}/api/v2/query?org=${org}`, { method: 'POST', headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/vnd.flux', 'Accept': 'application/csv' }, body: query });
+                if(!res.ok) throw new Error("Status " + res.status);
+                const csvText = await res.text(); const lines = csvText.trim().split('\n');
+                
+                let headerIdx = -1;
+                for(let i=0; i<lines.length; i++) { if(lines[i].includes('_time')) { headerIdx = i; break; } }
+                if(headerIdx === -1) { histChart.data.labels = []; histChart.data.datasets.forEach(d => d.data = []); histChart.update(); return; }
+
+                // MAGIA APLICADA AQUÍ: Limpiar los retornos de carro (\r) invisibles que rompían la lectura del nivel
+                const cleanHeaderLine = lines[headerIdx].replace(/\r/g, '');
+                const headers = cleanHeaderLine.split(',');
+                
+                const tIdx = headers.indexOf('_time');
+                // Usamos findIndex e includes para asegurar atrapar la columna aunque tenga espacios raros
+                const lIdx = headers.findIndex(h => h.includes('level'));
+                const haIdx = headers.findIndex(h => h.includes('hum_a'));
+                const hsIdx = headers.findIndex(h => h.includes('hum_s'));
+
+                const labels = [], dLvl = [], dHa = [], dHs = [];
+
+                for(let i = headerIdx + 1; i < lines.length; i++) {
+                    const cleanLine = lines[i].replace(/\r/g, '');
+                    if(cleanLine.trim() === '' || cleanLine.startsWith('#')) continue;
+                    const cols = cleanLine.split(','); if(cols.length < 4) continue;
+                    
+                    const date = new Date(cols[tIdx]);
+                    let timeLabel = rangeStart === '-1h' || rangeStart === '-24h' ? `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}` : `${date.getDate()}/${date.getMonth()+1} ${date.getHours()}:00`;
+                    
+                    labels.push(timeLabel); 
+                    // Si el índice existe, extrae el valor flotante, si no, pon 0 (Fail-safe)
+                    dLvl.push(lIdx !== -1 ? (parseFloat(cols[lIdx]) || 0) : 0); 
+                    dHa.push(haIdx !== -1 ? (parseFloat(cols[haIdx]) || 0) : 0); 
+                    dHs.push(hsIdx !== -1 ? (parseFloat(cols[hsIdx]) || 0) : 0);
+                }
+
+                histChart.data.labels = labels; 
+                histChart.data.datasets[0].data = dLvl; 
+                histChart.data.datasets[1].data = dHa; 
+                histChart.data.datasets[2].data = dHs; 
+                histChart.update();
+            } catch (e) { console.error(e); alert("Error descargando datos históricos."); }
         }
     </script>
 </body>

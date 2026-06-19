@@ -58,3 +58,40 @@ Fields:
 - `batt_mv`
 - `rssi_dbm`
 - `uptime_s`
+
+## SCADA bridge
+
+If you want to keep `sample_project-main/` unchanged, use:
+
+```bash
+python3 tools/thread_to_scada_bridge.py \
+  --dashboard-host 192.168.1.50 \
+  --sensor-addr fd11:22:33:44:0:ff:fe00:7001 \
+  --water-addr fd11:22:33:44:0:ff:fe00:7002
+```
+
+What it does:
+
+- polls `GET /env/temp` from the Thread sensor node
+- polls `GET /nivel` from the Thread water node
+- builds the JSON expected by `sample_project-main`
+- sends `POST coap://<dashboard-host>/sensores`
+
+Dashboard JSON shape:
+
+```json
+{
+  "hum_a": 61,
+  "hum_s": 73,
+  "level": 88
+}
+```
+
+The bridge also adds optional fields such as `temp_c` and `pump`, but the
+sample dashboard safely ignores any extra keys.
+
+Quick unit check:
+
+```bash
+python3 tools/test_scada_bridge.py
+```

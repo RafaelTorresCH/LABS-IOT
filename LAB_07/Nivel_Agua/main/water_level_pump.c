@@ -15,6 +15,7 @@ static const char *TAG = "nivel_agua";
 #define WATER_STABLE_SAMPLES 3
 
 static bool s_pump_on;
+static bool s_water_present;
 
 static bool water_detected(void)
 {
@@ -41,6 +42,7 @@ static void water_level_task(void *pvParameters)
 
     while (1) {
         bool wet = water_detected();
+        s_water_present = wet;
 
         if (wet) {
             wet_count++;
@@ -64,6 +66,21 @@ static void water_level_task(void *pvParameters)
 
         vTaskDelay(pdMS_TO_TICKS(LAB2_WATER_SAMPLE_PERIOD_MS));
     }
+}
+
+int water_level_percent(void)
+{
+    return s_water_present ? 100 : 0;
+}
+
+int water_level_raw_state(void)
+{
+    return s_water_present ? 1 : 0;
+}
+
+int water_pump_state(void)
+{
+    return s_pump_on ? 1 : 0;
 }
 
 void start_water_level_pump(void)
@@ -94,4 +111,3 @@ void start_water_level_pump(void)
 
     xTaskCreate(water_level_task, "water_level", 4096, NULL, 5, NULL);
 }
-
