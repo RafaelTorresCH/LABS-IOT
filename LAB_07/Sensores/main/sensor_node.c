@@ -10,31 +10,30 @@
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
+#include "hal/adc_types.h"
 
+#include "sensor_profile.h"
 #include "sensor_gateway_config.h"
 
 static const char *TAG = "sensor_node";
 
 #define ADC_MAX_RAW 4095.0f
-#define DHT_TIMEOUT_US 1000
-#define DHT_MAX_RETRIES 3
+#define DHT_TIMEOUT_US 2000
+#define DHT_MAX_RETRIES 5
+#define DHT_START_LOW_US 20000
+#define DHT_RECOVERY_MS 50
 
 static adc_oneshot_unit_handle_t s_adc_handle;
 static bool s_sensor_hw_ready;
+static adc_channel_t s_soil_channel;
 
 typedef struct {
     bool valid;
     float temperature_c;
     float air_humidity_pct;
 } dht_reading_t;
-
-typedef struct {
-    dht_reading_t dht;
-    int soil_raw;
-    int water_raw;
-    float soil_pct;
-    float water_pct;
-} sensor_reading_t;
+static dht_reading_t s_last_good_dht;
+static bool s_has_last_good_dht;
 
 static float clamp_pct(float value)
 {
@@ -68,6 +67,35 @@ static float adc_raw_to_pct(int raw, bool invert)
 {
     float pct = ((float)raw / ADC_MAX_RAW) * 100.0f;
     return clamp_pct(invert ? 100.0f - pct : pct);
+}
+
+static bool adc_channel_from_gpio(int gpio, adc_channel_t *channel)
+{
+    switch (gpio) {
+    case 0:
+        *channel = ADC_CHANNEL_0;
+        return true;
+    case 1:
+        *channel = ADC_CHANNEL_1;
+        return true;
+    case 2:
+        *channel = ADC_CHANNEL_2;
+        return true;
+    case 3:
+        *channel = ADC_CHANNEL_3;
+        return true;
+    case 4:
+        *channel = ADC_CHANNEL_4;
+        return true;
+    case 5:
+        *channel = ADC_CHANNEL_5;
+        return true;
+    case 6:
+        *channel = ADC_CHANNEL_6;
+        return true;
+    default:
+        return false;
+    }
 }
 
 static bool wait_for_gpio_level(gpio_num_t gpio, int level, int timeout_us)
@@ -107,6 +135,9 @@ static void dht_gpio_init(void)
 
 static void adc_init(void)
 {
+    bool channel_ok = adc_channel_from_gpio(LAB2_SOIL_MOISTURE_ADC_GPIO, &s_soil_channel);
+    assert(channel_ok && "LAB2_SOIL_MOISTURE_ADC_GPIO must map to ADC1 GPIO0..GPIO6 on ESP32-C6");
+
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = ADC_UNIT_1,
     };
@@ -116,8 +147,9 @@ static void adc_init(void)
         .bitwidth = ADC_BITWIDTH_DEFAULT,
         .atten = ADC_ATTEN_DB_12,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc_handle, ADC_CHANNEL_0, &channel_config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc_handle, ADC_CHANNEL_1, &channel_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc_handle, s_soil_channel, &channel_config));
+    ESP_LOGI(TAG, "Soil ADC configured on GPIO%d -> ADC channel %d",
+             LAB2_SOIL_MOISTURE_ADC_GPIO, (int)s_soil_channel);
 }
 
 static void sensor_hw_init(void)
@@ -139,9 +171,9 @@ static dht_reading_t dht_read(void)
 
     gpio_set_direction(gpio, GPIO_MODE_OUTPUT_OD);
     gpio_set_level(gpio, 0);
-    esp_rom_delay_us(20000);
+    esp_rom_delay_us(DHT_START_LOW_US);
     gpio_set_level(gpio, 1);
-    esp_rom_delay_us(40);
+    esp_rom_delay_us(30);
     gpio_set_direction(gpio, GPIO_MODE_INPUT);
     gpio_set_pull_mode(gpio, GPIO_PULLUP_ONLY);
 
@@ -198,6 +230,8 @@ static dht_reading_t dht_read_with_retries(void)
     for (int attempt = 1; attempt <= DHT_MAX_RETRIES; attempt++) {
         dht_reading_t reading = dht_read();
         if (dht_reading_is_plausible(&reading)) {
+            s_last_good_dht = reading;
+            s_has_last_good_dht = true;
             return reading;
         }
 
@@ -207,7 +241,12 @@ static dht_reading_t dht_read_with_retries(void)
                      reading.temperature_c,
                      reading.air_humidity_pct);
         }
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(DHT_RECOVERY_MS));
+    }
+
+    if (s_has_last_good_dht) {
+        ESP_LOGW(TAG, "DHT read failed, reusing last valid sample");
+        return s_last_good_dht;
     }
 
     dht_reading_t invalid = {0};
@@ -219,13 +258,20 @@ sensor_reading_t read_sensors(void)
     sensor_hw_init();
 
     sensor_reading_t reading = {0};
-    reading.dht = dht_read_with_retries();
+    dht_reading_t dht = dht_read_with_retries();
+    reading.valid = dht.valid;
+    reading.temperature_c = dht.temperature_c;
+    reading.air_humidity_pct = dht.air_humidity_pct;
 
-    ESP_ERROR_CHECK(adc_oneshot_read(s_adc_handle, ADC_CHANNEL_0, &reading.soil_raw));
-    ESP_ERROR_CHECK(adc_oneshot_read(s_adc_handle, ADC_CHANNEL_1, &reading.water_raw));
+    ESP_ERROR_CHECK(adc_oneshot_read(s_adc_handle, s_soil_channel, &reading.soil_raw));
 
     reading.soil_pct = adc_raw_to_pct(reading.soil_raw, LAB2_SOIL_MOISTURE_INVERT);
-    reading.water_pct = adc_raw_to_pct(reading.water_raw, false);
+    ESP_LOGI(TAG, "sample -> valid=%d temp=%.1fC hum=%.1f%% soil_raw=%d soil=%.1f%%",
+             reading.valid,
+             reading.temperature_c,
+             reading.air_humidity_pct,
+             reading.soil_raw,
+             reading.soil_pct);
     return reading;
 }
 

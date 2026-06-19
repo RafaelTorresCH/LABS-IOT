@@ -1,9 +1,14 @@
-# Guide Completo: Conectar ACM1 como Child al OTBR en ACM0
+# Guide Completo: Conectar nodos al OTBR y mantenerlo estable
 
 ## Arquitectura
-- **ACM0** (ESP32-C6 Mini): OpenThread RCP (Radio Co-Processor)
-- **ACM1** (ESP32-C6): FTD Battery Node (Sensores)
+- **Placa mini ESP32-C6**: OpenThread RCP (Radio Co-Processor)
+- **Placa estándar ESP32-C6**: nodo Thread
 - **Fedora**: OTBR host (Border Router + CLI)
+
+## Regla de estabilidad
+- El mini OTBR debe referenciarse por `/dev/serial/by-id/...Espressif...`, no por `/dev/ttyACM0`.
+- No dejes `idf.py monitor` abierto sobre la placa mini al mismo tiempo que `otbr-agent`.
+- Si el mini pasa por un hub, usa uno con alimentación estable; si el RCP se reinicia, OTBR pierde la sesión Spinel.
 
 ## Requisitos Previos
 ```bash
@@ -65,26 +70,29 @@ Presiona `Ctrl+]` para salir del monitor.
 
 ### 3.1 Verificar dispositivos conectados
 ```bash
-ls -l /dev/ttyACM*
-# Debe mostrar:
-# /dev/ttyACM0  - RCP
-# /dev/ttyACM1  - FTD Battery
+ls -l /dev/serial/by-id/
+# Debe mostrar algo como:
+# usb-Espressif_USB_JTAG_serial_debug_unit_<MAC>-if00 -> ../../ttyACM1
 ```
 
 ### 3.2 Iniciar otbr-agent
 ```bash
-sudo systemctl stop otbr-agent  # Si está corriendo
-sudo otbr-agent -I wpan0 "spinel+hdlc+uart:///dev/ttyACM0"
+sudo tools/otbr_resilience.sh recommend
+# Copia la línea OTBR_AGENT_OPTS sugerida en /etc/default/otbr-agent
+
+sudo systemctl restart otbr-agent
+sudo tools/otbr_resilience.sh status
 ```
 
 **Esperado:**
 ```
-[NCP] = OpenThread NCP v... (RCP from ACM0)
+leader
+# o router mientras ya exista otra red activa
 ```
 
 ### 3.3 En otra terminal, verificar el estado
 ```bash
-ot-ctl status
+sudo ot-ctl state
 # Esperado: "leader" o "router"
 ```
 
@@ -94,21 +102,26 @@ ot-ctl status
 
 ### 4.1 Si es la primera vez, crear dataset
 ```bash
-ot-ctl dataset init new
-ot-ctl dataset commit active
-ot-ctl ifconfig up
-ot-ctl thread start
+sudo ot-ctl dataset init new
+sudo ot-ctl dataset networkname SoilSenseLab
+sudo ot-ctl dataset networkkey 00112233445566778899aabbccddeeff
+sudo ot-ctl dataset channel 15
+sudo ot-ctl dataset panid 0x1234
+sudo ot-ctl dataset extpanid dead00beef00cafe
+sudo ot-ctl dataset commit active
+sudo ot-ctl ifconfig up
+sudo ot-ctl thread start
 ```
 
 ### 4.2 Esperar 5-10 segundos y verificar estado
 ```bash
-ot-ctl state
+sudo ot-ctl state
 # Esperado: "leader"
 ```
 
 ### 4.3 Obtener el dataset activo (IMPORTANTE)
 ```bash
-ot-ctl dataset active -x
+sudo ot-ctl dataset active -x
 # Copiar el valor hexadecimal (ej: 0e080000000000010000000300001835...)
 ```
 
@@ -118,13 +131,13 @@ ot-ctl dataset active -x
 
 ### 5.1 Monitorear ACM1 mientras se conecta
 ```bash
-idf.py -p /dev/ttyACM1 -B build/ftd_battery -C ftd_battery monitor
+idf.py -p /dev/ttyACM0 -B build/ftd_battery -C ftd_battery monitor
 ```
 
 ### 5.2 En otra terminal, enviar dataset al FTD
 ```bash
 # Reemplazar con el valor obtenido en 4.3
-ot-ctl dataset set active 0e080000000000010000000300001835...
+ot dataset set active 0e080000000000010000000300001835...
 ```
 
 **En el monitor ACM1, esperado:**
@@ -138,13 +151,13 @@ I (XXX) soilsense_ftd: Thread role=child rloc16=0x1001
 
 ### 6.1 Verificar topología en OTBR
 ```bash
-ot-ctl child list
+sudo ot-ctl child table
 # Esperado: 1 child con rloc16=0x1001
 ```
 
 ### 6.2 Obtener direcciones IPv6 del FTD (desde OTBR)
 ```bash
-ot-ctl child <rloc16>
+sudo ot-ctl ipaddr
 # O lista completa de children
 ```
 
@@ -160,9 +173,7 @@ En el monitor ACM1:
 ## PASO 7: Validar Reconexión Automática
 
 ### 7.1 Desconectar ACM1 del USB
-```bash
-# El FTD perderá alimentación USB
-```
+Desconecta solo el nodo, no el mini OTBR.
 
 ### 7.2 Reconectar ACM1 a otra fuente de alimentación
 ```bash
@@ -172,7 +183,7 @@ En el monitor ACM1:
 
 ### 7.3 Verificar reconexión
 ```bash
-idf.py -p /dev/ttyACM1 -B build/ftd_battery -C ftd_battery monitor
+idf.py -p /dev/ttyACM0 -B build/ftd_battery -C ftd_battery monitor
 
 # Esperado en 5-10 segundos:
 # I (XXX) soilsense_ftd: Thread role=child rloc16=0x1001
@@ -195,7 +206,7 @@ python3 tools/test_lab7_lab8.py lab7
 ### ACM1 se queda en "detached"
 - Verificar que el dataset está sincronizado: `ot-ctl dataset active -x`
 - Verificar que ACM0 (RCP) está respondiendo
-- Verificar que OTBR está corriendo: `ps aux | grep otbr-agent`
+- Verificar que OTBR está corriendo: `sudo tools/otbr_resilience.sh status`
 
 ### ACM1 no aparece como child en `ot-ctl child list`
 - Esperar 10-30 segundos (el attachment toma tiempo)
@@ -209,6 +220,12 @@ python3 tools/test_lab7_lab8.py lab7
 - Verificar NVS en ACM1: `idf.py -p /dev/ttyACM1 -C ftd_battery menuconfig`
   - `Partition Table` → debe estar habilitada
 - Verificar que el código hace `start_thread_from_active_dataset()` antes de `thread start`
+
+### `connect session failed: Connection refused`
+- Asegúrate de no tener `idf.py monitor` abierto sobre la placa mini.
+- Ejecuta: `sudo tools/otbr_resilience.sh port`
+- Luego ejecuta: `sudo tools/otbr_resilience.sh recover`
+- Si falla con `Platform------: Init() ... Failure`, normalmente el puerto serial cambió, está ocupado, o la placa mini no está realmente en modo RCP.
 
 ---
 

@@ -44,6 +44,25 @@ export SOILSENSE_THREAD_NODE_ADDR="fd11:22:33:44:0:ff:fe00:7000"
 export SOILSENSE_THREAD_RLOC16="7000"
 ```
 
+## OTBR recovery helper
+
+When the Fedora host loses the Spinel session with the mini RCP, use:
+
+```bash
+sudo tools/otbr_resilience.sh port
+sudo tools/otbr_resilience.sh recover
+```
+
+This is especially useful when:
+
+- the mini board was moved between USB ports
+- a previous `idf.py monitor` kept the USB Serial/JTAG endpoint busy
+- the OTBR host comes back up but `ot-ctl` still returns `Connection refused`
+
+For better service resilience on Fedora, you can also apply
+[otbr-agent-override.conf.example](/home/musicunauta24/esp/LABS-IOT/LAB_07/tools/otbr-agent-override.conf.example)
+as a systemd drop-in override.
+
 ## Influx measurement
 
 Measurement: `thread_battery`
@@ -143,3 +162,15 @@ Quick unit check:
 ```bash
 python3 tools/test_scada_bridge.py
 ```
+
+Local end-to-end structure check:
+
+```bash
+python3 tools/test_thread_dashboard_e2e.py
+```
+
+This E2E check proves the exact project structure:
+
+- sensor-side values are represented as Thread/CoAP telemetry
+- the host bridge transforms them into dashboard JSON
+- the dashboard-side CoAP endpoint receives `POST /sensores`

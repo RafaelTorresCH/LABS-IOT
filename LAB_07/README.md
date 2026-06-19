@@ -242,6 +242,32 @@ python3 tools/thread_to_scada_bridge.py \
   --once
 ```
 
+### OTBR resilience notes
+
+- Always bind the OTBR radio using `/dev/serial/by-id/...Espressif...`, not raw `/dev/ttyACM*`.
+- Do not keep `idf.py monitor` attached to the mini board while `otbr-agent` is running, because both processes contend for the same USB Serial/JTAG endpoint.
+- If the OTBR suddenly starts failing with `connect session failed: Connection refused` or `Platform------: Init() ... Failure`, the first suspicion should be serial ownership or a renamed USB port, not the Thread dataset.
+
+Quick recovery flow:
+
+```bash
+sudo tools/otbr_resilience.sh port
+sudo tools/otbr_resilience.sh recommend
+sudo tools/otbr_resilience.sh recover
+```
+
+What this helper checks:
+
+- whether the Espressif USB serial-by-id device is currently present
+- whether another process is holding the radio port open
+- whether `otbr-agent` restarts cleanly and `ot-ctl state` becomes reachable
+
+Recommended systemd hardening:
+
+1. Copy [tools/otbr-agent-override.conf.example](/home/musicunauta24/esp/LABS-IOT/LAB_07/tools/otbr-agent-override.conf.example) into `/etc/systemd/system/otbr-agent.service.d/override.conf`.
+2. Optionally enable the `ExecStartPre` line with your exact `/dev/serial/by-id/...` path.
+3. Run `sudo systemctl daemon-reload && sudo systemctl restart otbr-agent`.
+
 Before going live, you can validate the payload generation without needing the
 real nodes:
 
@@ -276,6 +302,7 @@ python3 tools/test_lab7_lab8.py lab5
 python3 tools/test_lab7_lab8.py lab8
 python3 tools/test_lab7_lab8.py lab7
 python3 tools/test_scada_bridge.py
+python3 tools/test_thread_dashboard_e2e.py
 ```
 
 If the live Lab 7 check needs sudo for `ot-ctl`, run `sudo -v` first in your terminal session.

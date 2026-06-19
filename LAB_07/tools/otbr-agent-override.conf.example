@@ -1,0 +1,13 @@
+[Unit]
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Restart=always
+RestartSec=3
+TimeoutStartSec=20
+
+# Uncomment and replace with your real by-id path if you want systemd to fail
+# early instead of repeatedly starting without the radio present.
+# ExecStartPre=/usr/bin/test -e /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_<MAC>-if00

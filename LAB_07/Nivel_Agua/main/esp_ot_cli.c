@@ -29,6 +29,7 @@
 #include "esp_openthread_types.h"
 #include "esp_ot_config.h"
 #include "esp_vfs_eventfd.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "openthread/dataset.h"
 #include "openthread/link.h"
@@ -48,24 +49,32 @@
 
 #define TAG "ot_esp_cli"
 
-// Forward declaration — implemented in coap_demo.c
 void start_coap_server(void);
-// Forward declaration — implemented in valve_demo.c
 void start_valve_server(void);
-void start_sensor_gateway(void);
-void start_sensor_mqtt_node(void);
 void start_water_level_pump(void);
 
-#define SOILSENSE_ROLE_CLIENT 0
-#define SOILSENSE_ROLE_SENSOR 1
-#define SOILSENSE_ROLE_VALVE  2
-#define SOILSENSE_ROLE_GATEWAY 3
-#define SOILSENSE_ROLE_SENSOR_MQTT 4
-#define SOILSENSE_ROLE_WATER_PUMP 5
+static void wipe_openthread_settings(void)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open_from_partition("nvs", "openthread", NVS_READWRITE, &handle);
 
-// Change this before flashing each board:
-// Node A: SOILSENSE_ROLE_SENSOR, Node B: SOILSENSE_ROLE_CLIENT, Node V: SOILSENSE_ROLE_VALVE.
-#define SOILSENSE_NODE_ROLE SOILSENSE_ROLE_WATER_PUMP
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "OpenThread NVS namespace not available yet: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_erase_all(handle);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Cleared persisted OpenThread settings to avoid stale dataset restore");
+    } else {
+        ESP_LOGW(TAG, "Could not clear OpenThread settings: %s", esp_err_to_name(err));
+    }
+}
 
 static void configure_thread_child(void)
 {
@@ -143,16 +152,6 @@ static void log_thread_identity(void)
 
 void app_main(void)
 {
-#if SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_GATEWAY
-    ESP_LOGI(TAG, "SoilSense gateway role selected; MQTT -> CoAP bridge enabled");
-    start_sensor_gateway();
-    return;
-#elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_SENSOR_MQTT
-    ESP_LOGI(TAG, "SoilSense sensor MQTT role selected; local measurements enabled");
-    start_sensor_mqtt_node();
-    return;
-#endif
-
     // Used eventfds:
     // * netif
     // * ot task queue
@@ -180,19 +179,13 @@ void app_main(void)
         },
     };
 
+    wipe_openthread_settings();
     ESP_ERROR_CHECK(esp_openthread_start(&config));
     configure_thread_child();
     start_thread_from_active_dataset();
+    ESP_LOGI(TAG, "SoilSense water profile: OpenThread child + CoAP resources /nivel and /act/valve");
     log_thread_identity();
-#if SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_SENSOR
     start_coap_server();
-#elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_VALVE
-    start_valve_server();
-#elif SOILSENSE_NODE_ROLE == SOILSENSE_ROLE_WATER_PUMP
-    ESP_LOGI(TAG, "SoilSense water level role selected; pump control enabled");
     start_water_level_pump();
     start_valve_server();
-#else
-    ESP_LOGI(TAG, "SoilSense client role selected; no local CoAP server started");
-#endif
 }

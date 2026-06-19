@@ -13,22 +13,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "sensor_profile.h"
 #include "sensor_gateway_config.h"
 
 static const char *TAG = "coap_demo";
 #define COAP_PORT 5683
-
-typedef struct {
-    bool valid;
-    float temperature_c;
-    float air_humidity_pct;
-    int soil_raw;
-    float soil_pct;
-    int water_raw;
-    float water_pct;
-} sensor_reading_t;
-
-extern sensor_reading_t read_sensors(void);
 
 static sensor_reading_t g_current_sample = {0};
 static sensor_reading_t g_last_notified_sample = {0};
